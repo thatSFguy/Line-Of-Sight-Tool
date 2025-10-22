@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RF Line-of-Sight Tool (910 MHz)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>RF Line-of-Sight Tool (910 MHz)</h1>
+    <input type="file" id="csvFile" accept=".csv">
+    <br>
+    <label>Default antenna height (m):</label>
+    <input type="number" id="defaultHeight" value="10">
+    <br>
+    <label>Diffraction loss threshold for 'Clear' LOS (dB):</label>
+    <input type="number" id="losThreshold" value="6">
+    <br>
+    <button onclick="processCSV()">Process</button>
+    <div id="results"></div>
+    <script>
+        const FREQ_MHZ = 910;
+        const LAMBDA = 300 / FREQ_MHZ; // wavelength in m (c=3e8)
+        const EARTH_RADIUS = 6371000; // m
+        const EFFECTIVE_RADIUS_FACTOR = 4 / 3;
+        const EFFECTIVE_RADIUS = EARTH_RADIUS * EFFECTIVE_RADIUS_FACTOR;
+        const HPROF_STEP = 100; // m
+
+        const TILE_CACHE = new Map(); // Cache for loaded HGT data
+        const BASE_TILE_URL = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/tiles/'; // Replace with your GitHub repo
+
+        // Function to get tile name for lat, lon
+        function getTileName(lat, lon) {
+            const latFloor = Math.floor(lat);
+            const lonFloor = Math.floor(lon);
+            const latStr = lat >= 0 ? 'N' + latFloor : 'S' + (-latFloor);
+            const lonStr = lon >= 0 ? 'E' + ('00' + lonFloor).slice(-3) : 'W' + ('00' + (-lonFloor)).slice(-3);
+            return latStr + lonStr + '.hgt';
+        }
+
+        // Load HGT tile as ArrayBuffer
+        async function loadTile(tileName) {
+            if (TILE_CACHE.has(tileName)) return TILE_CACHE.get(tileName);
+            try {
+                const response = await fetch(BASE_TILE_URL + tileName);
+                if (!response.ok) throw new Error('Tile not found');
+                const buffer = await response.arrayBuffer();
+                TILE_CACHE.set(tileName, buffer);
+                return buffer;
+            } catch (e) {
+                console.error('Error loading tile:', e);
+                return null;
+            }
+        }
+
+        // Get elevation from HGT (1201x1201 grid, big-endian int16, voids -32768)
+        async function getElevation(lat, lon) {
+            const tileName = getTileName(lat, lon);
+            const buffer = await loadTile(tileName);
+            if (!buffer) return 0; // Default to 0 if error
+
+            const view = new DataView(buffer);
+            const latFrac = lat - Math.floor(lat);
+            const lonFrac = lon - Math.floor(lon);
+            const row = Math.floor((1 - latFrac) * 1200); // North to South
+            const col = Math.floor(lonFrac * 1200); // West to East? For W tiles, lon increasing east.
+            const index = (row * 1201 + col) * 2;
+            let elev = view.getInt16(index, false); // big-endian
+            if (elev === -32768) elev = 0; // Void fill simple
+            return elev;
+        }
+
+        // Haversine distance (m)
+        function haversineDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371000;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        // Get intermediate point on great circle
+        function getIntermediatePoint(lat1, lon1, lat2, lon2, fraction) {
+            const d = haversineDistance(lat1, lon1, lat2, lon2) / EARTH_RADIUS; // angular dist
+            const a = Math.sin((1 - fraction) * d) / Math.sin(d);
+            const b = Math.sin(fraction * d) / Math.sin(d);
+            const x = a * Math.cos(lat1 * Math.PI/180) * Math.cos(lon1 * Math.PI/180) + b * Math.cos(lat2 * Math.PI/180) * Math.cos(lon2 * Math.PI/180);
+            const y = a * Math.cos(lat1 * Math.PI/180) * Math.sin(lon1 * Math.PI/180) + b * Math.cos(lat2 * Math.PI/180) * Math.sin(lon2 * Math.PI/180);
+            const z = a * Math.sin(lat1 * Math.PI/180) + b * Math.sin(lat2 * Math.PI/180);
+            const lat = Math.atan2(z, Math.sqrt(x*x + y*y)) * 180 / Math.PI;
+            const lon = Math.atan2(y, x) * 180 / Math.PI;
+            return {lat, lon};
+        }
+
+        // Get height profile
+        async function getHeightProfile(latA, lonA, latB, lonB, step) {
+            const totalDist = haversineDistance(latA, lonA, latB, lonB);
+            const numSteps = Math.ceil(totalDist / step) + 1;
+            const distances = [];
+            const heights = [];
+            let currentDist = 0;
+            for (let i = 0; i < numSteps; i++) {
+                const fraction = i / (numSteps - 1);
+                const point = getIntermediatePoint(latA, lonA, latB, lonB, fraction);
+                const height = await getElevation(point.lat, point.lon);
+                heights.push(height);
+                distances.push(currentDist / 1000); // km
+                currentDist += totalDist / (numSteps - 1);
+            }
+            return {distances, heights, totalDist: totalDist / 1000}; // km
+        }
+
+        // Knife-edge diffraction loss approx
+        function knifeEdgeDiffractionLoss(v) {
+            if (v <= -0.78) return 0;
+            return 6.9 + 20 * Math.log10(Math.sqrt((v - 0.1)**2 + 1) + (v - 0.1));
+        }
+
+        // Free space loss (dB)
+        function freeSpaceLoss(d_km, freq_mhz) {
+            return 32.45 + 20 * Math.log10(d_km) + 20 * Math.log10(freq_mhz);
+        }
+
+        // Process pair
+        async function processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, losThreshold) {
+            const profile = await getHeightProfile(latA, lonA, latB, lonB, HPROF_STEP);
+            const distances = profile.distances; // km
+            const heights = profile.heights; // m
+            const totalDist = profile.totalDist; // km
+            heights[0] += hA;
+            heights[heights.length - 1] += hB;
+
+            // Curvature adjustments
+            const distances_m = distances.map(d => d * 1000);
+            const curvature_adjust = distances_m.map(d => (d ** 2) / (2 * EFFECTIVE_RADIUS));
+
+            // LOS line (straight in adjusted space)
+            const los_line = [];
+            for (let i = 0; i < heights.length; i++) {
+                los_line.push(heights[0] + (heights[heights.length - 1] - heights[0]) * (distances[i] / totalDist));
+            }
+
+            // Find max obstruction for knife-edge
+            let maxV = -Infinity;
+            let maxIndex = -1;
+            for (let i = 1; i < heights.length - 1; i++) {
+                const adjustedTerrain = heights[i] - curvature_adjust[i];
+                const adjustedLos = los_line[i] - curvature_adjust[i];
+                const obstruction = adjustedTerrain - adjustedLos;
+                if (obstruction > maxV) {
+                    maxV = obstruction;
+                    maxIndex = i;
+                }
+            }
+
+            let diffractionLoss = 0;
+            if (maxIndex > -1 && maxV > 0) {
+                const d1 = distances_m[maxIndex]; // m
+                const d2 = distances_m[distances_m.length - 1] - d1;
+                const h = maxV; // m
+                const nu = h * Math.sqrt((d1 + d2) / (LAMBDA * d1 * d2)); // Note: d in m, lambda m
+                diffractionLoss = knifeEdgeDiffractionLoss(nu);
+            }
+
+            const fsLoss = freeSpaceLoss(totalDist, FREQ_MHZ);
+            const totalLoss = fsLoss + diffractionLoss;
+            const isLos = diffractionLoss < losThreshold ? 'Clear' : 'Obstructed';
+
+            // Plot
+            const canvasId = 'chart_' + nameB.replace(/\s/g, '_');
+            const div = document.createElement('div');
+            div.innerHTML = `<h3>Path Profile: ${nameA} to ${nameB}</h3><canvas id="${canvasId}"></canvas>`;
+            document.getElementById('results').appendChild(div);
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: distances,
+                    datasets: [{
+                        label: 'Terrain Profile (Curvature Adjusted)',
+                        data: heights.map((h, i) => h - curvature_adjust[i]),
+                        borderColor: 'black',
+                        fill: false
+                    }, {
+                        label: 'LOS Line',
+                        data: los_line.map((l, i) => l - curvature_adjust[i]),
+                        borderColor: 'red',
+                        borderDash: [5, 5],
+                        fill: false
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { title: { display: true, text: 'Distance [km]' } },
+                        y: { title: { display: true, text: 'Height [m]' } }
+                    }
+                }
+            });
+
+            return { siteB: nameB, status: isLos, diffLoss: diffractionLoss.toFixed(2), fsLoss: fsLoss.toFixed(2), totalLoss: totalLoss.toFixed(2) };
+        }
+
+        // Process CSV
+        async function processCSV() {
+            const file = document.getElementById('csvFile').files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const text = e.target.result;
+                const lines = text.split('\n').map(l => l.trim().split(','));
+                const headers = lines[0];
+                const data = lines.slice(1).map(row => {
+                    const obj = {};
+                    headers.forEach((h, i) => obj[h.trim()] = row[i] ? row[i].trim() : '');
+                    return obj;
+                });
+
+                const defaultHeight = parseFloat(document.getElementById('defaultHeight').value);
+                const losThreshold = parseFloat(document.getElementById('losThreshold').value);
+
+                const locA = data[0];
+                const nameA = locA['Location Name'];
+                const latA = parseFloat(locA['Latitude']);
+                const lonA = parseFloat(locA['Longitude']);
+                const hA = locA['Height'] ? parseFloat(locA['Height']) : defaultHeight;
+
+                document.getElementById('results').innerHTML = '';
+                const table = document.createElement('table');
+                table.innerHTML = `<tr><th>Site B</th><th>LOS Status</th><th>Diffraction Loss (dB)</th><th>Free-Space Loss (dB)</th><th>Total Loss (dB)</th></tr>`;
+                const results = [];
+                for (let i = 1; i < data.length; i++) {
+                    const locB = data[i];
+                    const nameB = locB['Location Name'];
+                    const latB = parseFloat(locB['Latitude']);
+                    const lonB = parseFloat(locB['Longitude']);
+                    const hB = locB['Height'] ? parseFloat(locB['Height']) : defaultHeight;
+
+                    const result = await processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, losThreshold);
+                    results.push(result);
+                }
+                results.forEach(r => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${r.siteB}</td><td>${r.status}</td><td>${r.diffLoss}</td><td>${r.fsLoss}</td><td>${r.totalLoss}</td>`;
+                    table.appendChild(tr);
+                });
+                const div = document.createElement('div');
+                div.innerHTML = `<h2>LOS Results (from Site A: ${nameA})</h2>`;
+                div.appendChild(table);
+                document.getElementById('results').appendChild(div);
+            };
+            reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
