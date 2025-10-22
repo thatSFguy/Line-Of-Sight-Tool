@@ -13,12 +13,14 @@
         th, td { border: 1px solid black; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
         .error { color: red; }
+        .sample-link { margin: 10px 0; }
     </style>
 </head>
 <body>
     <h1>RF Line-of-Sight Tool (910 MHz)</h1>
-    <a href="https://raw.githubusercontent.com/thatSFguy/Line-Of-Sight-Tool/main/RF_locations_sample.csv">Sample CSV file</a>
     <input type="file" id="csvFile" accept=".csv">
+    <br>
+    <a href="https://raw.githubusercontent.com/thatSFguy/Line-Of-Sight-Tool/main/RF_locations_sample.csv" download="RF_locations_sample.csv" class="sample-link">Download Sample CSV</a>
     <br>
     <label>Default antenna height (m):</label>
     <input type="number" id="defaultHeight" value="10">
@@ -39,7 +41,9 @@
         const KM_TO_MILES = 0.621371; // Conversion factor
 
         const TILE_CACHE = new Map(); // Cache for loaded HGT data
-        const BASE_TILE_URL = 'https://raw.githubusercontent.com/thatSFguy/Line-Of-Sight-Tool/main/tiles/'; // Replace with your GitHub repo
+        const BASE_TILE_URL = 'https://raw.githubusercontent.com/thatSFguy/Line-Of-Sight-Tool/main/tiles/'; // Your repo
+
+        let map = null; // Global map variable
 
         // Validate CSV data
         function validateCSV(lines) {
@@ -274,7 +278,19 @@
                 const lonA = locA['Longitude'];
                 const hA = locA['Height'] || defaultHeight;
 
+                // Clear previous results and map
                 document.getElementById('results').innerHTML = '';
+                if (map) {
+                    map.remove(); // Remove old map
+                }
+                const mapDiv = document.getElementById('map');
+                mapDiv.innerHTML = ''; // Clear map div
+                map = L.map('map').setView([latA, lonA], 7); // Initialize new map
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                }).addTo(map);
+
+                // Process pairs
                 const table = document.createElement('table');
                 table.innerHTML = `<tr><th>Site B</th><th>LOS Status</th><th>Diffraction Loss (dB)</th><th>Free-Space Loss (dB)</th><th>Total Loss (dB)</th></tr>`;
                 const results = [];
@@ -288,12 +304,6 @@
                     const result = await processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, losThreshold);
                     results.push(result);
                 }
-
-                // Initialize map
-                const map = L.map('map').setView([latA, lonA], 7); // Center on Site A
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                }).addTo(map);
 
                 // Add Site A marker (blue)
                 L.marker([latA, lonA], {
