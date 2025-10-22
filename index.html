@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>RF Line-of-Sight Tool (910 MHz)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 <body>
     <h1>RF Line-of-Sight Tool (910 MHz)</h1>
@@ -26,7 +27,7 @@
         const HPROF_STEP = 100; // m
 
         const TILE_CACHE = new Map(); // Cache for loaded HGT data
-        const BASE_TILE_URL = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/tiles/'; // Replace with your GitHub repo
+        const BASE_TILE_URL = 'https://raw.githubusercontent.com/your_username/your_repo/main/tiles/'; // Replace with your GitHub repo
 
         // Function to get tile name for lat, lon
         function getTileName(lat, lon) {
@@ -34,18 +35,21 @@
             const lonFloor = Math.floor(lon);
             const latStr = lat >= 0 ? 'N' + latFloor : 'S' + (-latFloor);
             const lonStr = lon >= 0 ? 'E' + ('00' + lonFloor).slice(-3) : 'W' + ('00' + (-lonFloor)).slice(-3);
-            return latStr + lonStr + '.hgt';
+            return latStr + lonStr + '.hgt.zip';
         }
 
-        // Load HGT tile as ArrayBuffer
+        // Load and unzip HGT tile
         async function loadTile(tileName) {
             if (TILE_CACHE.has(tileName)) return TILE_CACHE.get(tileName);
             try {
                 const response = await fetch(BASE_TILE_URL + tileName);
                 if (!response.ok) throw new Error('Tile not found');
                 const buffer = await response.arrayBuffer();
-                TILE_CACHE.set(tileName, buffer);
-                return buffer;
+                const zip = await JSZip.loadAsync(buffer);
+                const hgtFile = Object.values(zip.files)[0]; // Assume one .hgt file per zip
+                const hgtBuffer = await hgtFile.async('arraybuffer');
+                TILE_CACHE.set(tileName, hgtBuffer);
+                return hgtBuffer;
             } catch (e) {
                 console.error('Error loading tile:', e);
                 return null;
@@ -62,7 +66,7 @@
             const latFrac = lat - Math.floor(lat);
             const lonFrac = lon - Math.floor(lon);
             const row = Math.floor((1 - latFrac) * 1200); // North to South
-            const col = Math.floor(lonFrac * 1200); // West to East? For W tiles, lon increasing east.
+            const col = Math.floor(lonFrac * 1200); // West to East
             const index = (row * 1201 + col) * 2;
             let elev = view.getInt16(index, false); // big-endian
             if (elev === -32768) elev = 0; // Void fill simple
@@ -160,7 +164,7 @@
                 const d1 = distances_m[maxIndex]; // m
                 const d2 = distances_m[distances_m.length - 1] - d1;
                 const h = maxV; // m
-                const nu = h * Math.sqrt((d1 + d2) / (LAMBDA * d1 * d2)); // Note: d in m, lambda m
+                const nu = h * Math.sqrt((d1 + d2) / (LAMBDA * d1 * d2));
                 diffractionLoss = knifeEdgeDiffractionLoss(nu);
             }
 
