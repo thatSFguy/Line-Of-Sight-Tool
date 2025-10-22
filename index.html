@@ -5,9 +5,19 @@
     <title>RF Line-of-Sight Tool (910 MHz)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { height: 400px; margin-top: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .error { color: red; }
+    </style>
 </head>
 <body>
     <h1>RF Line-of-Sight Tool (910 MHz)</h1>
+    <a href="https://raw.githubusercontent.com/thatSFguy/Line-Of-Sight-Tool/main/RF_locations_sample.csv">Sample CSV file</a>
     <input type="file" id="csvFile" accept=".csv">
     <br>
     <label>Default antenna height (m):</label>
@@ -18,6 +28,7 @@
     <br>
     <button onclick="processCSV()">Process</button>
     <div id="results"></div>
+    <div id="map"></div>
     <script>
         const FREQ_MHZ = 910;
         const LAMBDA = 300 / FREQ_MHZ; // wavelength in m (c=3e8)
@@ -25,9 +36,38 @@
         const EFFECTIVE_RADIUS_FACTOR = 4 / 3;
         const EFFECTIVE_RADIUS = EARTH_RADIUS * EFFECTIVE_RADIUS_FACTOR;
         const HPROF_STEP = 100; // m
+        const KM_TO_MILES = 0.621371; // Conversion factor
 
         const TILE_CACHE = new Map(); // Cache for loaded HGT data
         const BASE_TILE_URL = 'https://raw.githubusercontent.com/thatSFguy/Line-Of-Sight-Tool/main/tiles/'; // Replace with your GitHub repo
+
+        // Validate CSV data
+        function validateCSV(lines) {
+            if (lines.length < 2) return "CSV must have at least two rows (Site A + one Site B)";
+            const headers = lines[0].map(h => h.trim());
+            const expected = ['Location Name', 'Latitude', 'Longitude', 'Height'];
+            if (!headers.every((h, i) => h === expected[i] || (i === 3 && h === 'Height'))) {
+                return "CSV headers must be: Location Name,Latitude,Longitude,Height (Height optional)";
+            }
+            const validRows = [];
+            for (let i = 1; i < lines.length; i++) {
+                const row = lines[i].map(v => v.trim());
+                if (row.length < 3 || !row[0] || isNaN(parseFloat(row[1])) || isNaN(parseFloat(row[2]))) {
+                    continue; // Skip blank/invalid rows
+                }
+                if (row.length > 3 && row[3] && isNaN(parseFloat(row[3]))) {
+                    return `Invalid Height in row ${i + 1}: ${row[3]}`;
+                }
+                validRows.push(row);
+            }
+            if (validRows.length < 1) return "No valid data rows after Site A";
+            return { validRows: validRows.map(row => ({
+                'Location Name': row[0],
+                'Latitude': parseFloat(row[1]),
+                'Longitude': parseFloat(row[2]),
+                'Height': row[3] ? parseFloat(row[3]) : null
+            })) };
+        }
 
         // Function to get tile name for lat, lon
         function getTileName(lat, lon) {
@@ -110,10 +150,10 @@
                 const point = getIntermediatePoint(latA, lonA, latB, lonB, fraction);
                 const height = await getElevation(point.lat, point.lon);
                 heights.push(height);
-                distances.push(currentDist / 1000); // km
+                distances.push((currentDist / 1000 * KM_TO_MILES).toFixed(1)); // Convert to miles, 1 decimal
                 currentDist += totalDist / (numSteps - 1);
             }
-            return {distances, heights, totalDist: totalDist / 1000}; // km
+            return {distances, heights, totalDist: totalDist / 1000 * KM_TO_MILES}; // miles
         }
 
         // Knife-edge diffraction loss approx
@@ -123,21 +163,22 @@
         }
 
         // Free space loss (dB)
-        function freeSpaceLoss(d_km, freq_mhz) {
+        function freeSpaceLoss(d_miles, freq_mhz) {
+            const d_km = d_miles / KM_TO_MILES;
             return 32.45 + 20 * Math.log10(d_km) + 20 * Math.log10(freq_mhz);
         }
 
         // Process pair
         async function processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, losThreshold) {
             const profile = await getHeightProfile(latA, lonA, latB, lonB, HPROF_STEP);
-            const distances = profile.distances; // km
+            const distances = profile.distances; // miles, rounded
             const heights = profile.heights; // m
-            const totalDist = profile.totalDist; // km
+            const totalDist = profile.totalDist; // miles
             heights[0] += hA;
             heights[heights.length - 1] += hB;
 
             // Curvature adjustments
-            const distances_m = distances.map(d => d * 1000);
+            const distances_m = distances.map(d => d / KM_TO_MILES * 1000);
             const curvature_adjust = distances_m.map(d => (d ** 2) / (2 * EFFECTIVE_RADIUS));
 
             // LOS line (straight in adjusted space)
@@ -172,7 +213,7 @@
             const totalLoss = fsLoss + diffractionLoss;
             const isLos = diffractionLoss < losThreshold ? 'Clear' : 'Obstructed';
 
-            // Plot
+            // Plot (only if valid pair)
             const canvasId = 'chart_' + nameB.replace(/\s/g, '_');
             const div = document.createElement('div');
             div.innerHTML = `<h3>Path Profile: ${nameA} to ${nameB}</h3><canvas id="${canvasId}"></canvas>`;
@@ -197,38 +238,41 @@
                 },
                 options: {
                     scales: {
-                        x: { title: { display: true, text: 'Distance [km]' } },
+                        x: { title: { display: true, text: 'Distance [miles]' } },
                         y: { title: { display: true, text: 'Height [m]' } }
                     }
                 }
             });
 
-            return { siteB: nameB, status: isLos, diffLoss: diffractionLoss.toFixed(2), fsLoss: fsLoss.toFixed(2), totalLoss: totalLoss.toFixed(2) };
+            return { siteB: nameB, status: isLos, diffLoss: diffractionLoss.toFixed(2), fsLoss: fsLoss.toFixed(2), totalLoss: totalLoss.toFixed(2), latB, lonB };
         }
 
         // Process CSV
         async function processCSV() {
             const file = document.getElementById('csvFile').files[0];
-            if (!file) return;
+            if (!file) {
+                document.getElementById('results').innerHTML = '<p class="error">Please select a CSV file.</p>';
+                return;
+            }
             const reader = new FileReader();
             reader.onload = async function(e) {
                 const text = e.target.result;
                 const lines = text.split('\n').map(l => l.trim().split(','));
-                const headers = lines[0];
-                const data = lines.slice(1).map(row => {
-                    const obj = {};
-                    headers.forEach((h, i) => obj[h.trim()] = row[i] ? row[i].trim() : '');
-                    return obj;
-                });
+                const validation = validateCSV(lines);
+                if (typeof validation === 'string') {
+                    document.getElementById('results').innerHTML = `<p class="error">Error: ${validation}</p>`;
+                    return;
+                }
 
+                const data = validation.validRows;
                 const defaultHeight = parseFloat(document.getElementById('defaultHeight').value);
                 const losThreshold = parseFloat(document.getElementById('losThreshold').value);
 
                 const locA = data[0];
                 const nameA = locA['Location Name'];
-                const latA = parseFloat(locA['Latitude']);
-                const lonA = parseFloat(locA['Longitude']);
-                const hA = locA['Height'] ? parseFloat(locA['Height']) : defaultHeight;
+                const latA = locA['Latitude'];
+                const lonA = locA['Longitude'];
+                const hA = locA['Height'] || defaultHeight;
 
                 document.getElementById('results').innerHTML = '';
                 const table = document.createElement('table');
@@ -237,13 +281,38 @@
                 for (let i = 1; i < data.length; i++) {
                     const locB = data[i];
                     const nameB = locB['Location Name'];
-                    const latB = parseFloat(locB['Latitude']);
-                    const lonB = parseFloat(locB['Longitude']);
-                    const hB = locB['Height'] ? parseFloat(locB['Height']) : defaultHeight;
+                    const latB = locB['Latitude'];
+                    const lonB = locB['Longitude'];
+                    const hB = locB['Height'] || defaultHeight;
 
                     const result = await processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, losThreshold);
                     results.push(result);
                 }
+
+                // Initialize map
+                const map = L.map('map').setView([latA, lonA], 7); // Center on Site A
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                }).addTo(map);
+
+                // Add Site A marker (blue)
+                L.marker([latA, lonA], {
+                    icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png', iconSize: [25, 41], iconAnchor: [12, 41] })
+                }).addTo(map).bindPopup(nameA);
+
+                // Add Site B markers (green) and lines to Site A
+                results.forEach(r => {
+                    L.marker([r.latB, r.lonB], {
+                        icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41] })
+                    }).addTo(map).bindPopup(r.siteB);
+                    L.polyline([[latA, lonA], [r.latB, r.lonB]], { color: 'blue', weight: 2 }).addTo(map);
+                });
+
+                // Adjust map bounds
+                const bounds = [[latA, lonA], ...results.map(r => [r.latB, r.lonB])];
+                map.fitBounds(bounds, { padding: [50, 50] });
+
+                // Display results table
                 results.forEach(r => {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `<td>${r.siteB}</td><td>${r.status}</td><td>${r.diffLoss}</td><td>${r.fsLoss}</td><td>${r.totalLoss}</td>`;
