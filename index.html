@@ -310,12 +310,15 @@
                     icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png', iconSize: [25, 41], iconAnchor: [12, 41] })
                 }).addTo(map).bindPopup(nameA);
 
-                // Add Site B markers (green) and lines to Site A
+                // Add Site B markers (green) and lines to Site A (blue for Clear, red for Obstructed)
                 results.forEach(r => {
                     L.marker([r.latB, r.lonB], {
                         icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41] })
                     }).addTo(map).bindPopup(r.siteB);
-                    L.polyline([[latA, lonA], [r.latB, r.lonB]], { color: 'blue', weight: 2 }).addTo(map);
+                    L.polyline([[latA, lonA], [r.latB, r.lonB]], { 
+                        color: r.status === 'Clear' ? 'blue' : 'red', 
+                        weight: 2 
+                    }).addTo(map);
                 });
 
                 // Adjust map bounds
