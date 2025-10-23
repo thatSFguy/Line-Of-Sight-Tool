@@ -49,13 +49,13 @@
         function validateCSV(lines) {
             if (lines.length < 2) return "CSV must have at least two rows (Site A + one Site B)";
             const headers = lines[0].map(h => h.trim());
-            const expected = ['Location Name', 'Latitude', 'Longitude', 'Height'];
-            if (!headers.every((h, i) => h === expected[i] || (i === 3 && h === 'Height'))) {
-                return "CSV headers must be: Location Name,Latitude,Longitude,Height (Height optional)";
+            const expected = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
+            if (!headers.every((h, i) => h === expected[i])) {
+                return "CSV headers must be: Location Name,Latitude,Longitude,Height,Notes";
             }
             const validRows = [];
             for (let i = 1; i < lines.length; i++) {
-                const row = lines[i].map(v => v.trim());
+                const row = lines[i].map(v => v.trim().replace(/^"(.*)"$/, '$1')); // Strip quotes
                 if (row.length < 3 || !row[0] || isNaN(parseFloat(row[1])) || isNaN(parseFloat(row[2]))) {
                     continue; // Skip blank/invalid rows
                 }
@@ -69,7 +69,8 @@
                 'Location Name': row[0],
                 'Latitude': parseFloat(row[1]),
                 'Longitude': parseFloat(row[2]),
-                'Height': row[3] ? parseFloat(row[3]) : null
+                'Height': row[3] ? parseFloat(row[3]) : null,
+                'Notes': row[4] || '' // Include Notes, default to empty string if missing
             })) };
         }
 
@@ -173,7 +174,7 @@
         }
 
         // Process pair
-        async function processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, losThreshold) {
+        async function processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, notesB, losThreshold) {
             const profile = await getHeightProfile(latA, lonA, latB, lonB, HPROF_STEP);
             const distances = profile.distances; // miles, rounded
             const heights = profile.heights; // m
@@ -248,7 +249,7 @@
                 }
             });
 
-            return { siteB: nameB, status: isLos, diffLoss: diffractionLoss.toFixed(2), fsLoss: fsLoss.toFixed(2), totalLoss: totalLoss.toFixed(2), latB, lonB };
+            return { siteB: nameB, status: isLos, diffLoss: diffractionLoss.toFixed(2), fsLoss: fsLoss.toFixed(2), totalLoss: totalLoss.toFixed(2), latB, lonB, notesB };
         }
 
         // Process CSV
@@ -277,6 +278,7 @@
                 const latA = locA['Latitude'];
                 const lonA = locA['Longitude'];
                 const hA = locA['Height'] || defaultHeight;
+                const notesA = locA['Notes'];
 
                 // Clear previous results and map
                 document.getElementById('results').innerHTML = '';
@@ -292,7 +294,7 @@
 
                 // Process pairs
                 const table = document.createElement('table');
-                table.innerHTML = `<tr><th>Site B</th><th>LOS Status</th><th>Diffraction Loss (dB)</th><th>Free-Space Loss (dB)</th><th>Total Loss (dB)</th></tr>`;
+                table.innerHTML = `<tr><th>Site B</th><th>LOS Status</th><th>Diffraction Loss (dB)</th><th>Free-Space Loss (dB)</th><th>Total Loss (dB)</th><th>Notes</th></tr>`;
                 const results = [];
                 for (let i = 1; i < data.length; i++) {
                     const locB = data[i];
@@ -300,21 +302,22 @@
                     const latB = locB['Latitude'];
                     const lonB = locB['Longitude'];
                     const hB = locB['Height'] || defaultHeight;
+                    const notesB = locB['Notes'];
 
-                    const result = await processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, losThreshold);
+                    const result = await processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, notesB, losThreshold);
                     results.push(result);
                 }
 
                 // Add Site A marker (blue)
                 L.marker([latA, lonA], {
                     icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png', iconSize: [25, 41], iconAnchor: [12, 41] })
-                }).addTo(map).bindPopup(nameA);
+                }).addTo(map).bindPopup(`${nameA}${notesA ? '<br>Notes: ' + notesA : ''}`);
 
                 // Add Site B markers (green) and lines to Site A (blue for Clear, red for Obstructed)
                 results.forEach(r => {
                     L.marker([r.latB, r.lonB], {
                         icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41] })
-                    }).addTo(map).bindPopup(r.siteB);
+                    }).addTo(map).bindPopup(`${r.siteB}${r.notesB ? '<br>Notes: ' + r.notesB : ''}`);
                     L.polyline([[latA, lonA], [r.latB, r.lonB]], { 
                         color: r.status === 'Clear' ? 'blue' : 'red', 
                         weight: 2 
@@ -328,7 +331,7 @@
                 // Display results table
                 results.forEach(r => {
                     const tr = document.createElement('tr');
-                    tr.innerHTML = `<td>${r.siteB}</td><td>${r.status}</td><td>${r.diffLoss}</td><td>${r.fsLoss}</td><td>${r.totalLoss}</td>`;
+                    tr.innerHTML = `<td>${r.siteB}</td><td>${r.status}</td><td>${r.diffLoss}</td><td>${r.fsLoss}</td><td>${r.totalLoss}</td><td>${r.notesB}</td>`;
                     table.appendChild(tr);
                 });
                 const div = document.createElement('div');
