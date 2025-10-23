@@ -8,62 +8,253 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        #map { height: 400px; margin-top: 20px; }
-        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-        th, td { border: 1px solid black; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        .error { color: red; }
-        .sample-link { margin: 10px 0; }
-        .form-group { margin: 10px 0; }
-        .form-group label { display: inline-block; width: 150px; }
-        .form-group select, .form-group input[type="radio"] { margin-right: 10px; }
+        :root {
+            --bg: #f9f9fb;
+            --text: #333;
+            --border: #ddd;
+            --primary: #007bff;
+            --danger: #dc3545;
+            --success: #28a745;
+            --warning: #ffc107;
+            --dark-bg: #2c3e50;
+            --dark-text: #ecf0f1;
+        }
+
+        [data-theme="dark"] {
+            --bg: #2c3e50;
+            --text: #ecf0f1;
+            --border: #444;
+            --primary: #3498db;
+        }
+
+        [data-theme="dark"] .notice {
+            background: #d39e00;
+            color: #fff;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background: var(--bg);
+            color: var(--text);
+            transition: background 0.3s, color 0.3s;
+        }
+
+        h1, h2 { color: var(--primary); margin-bottom: 10px; }
+
+        .notice {
+            background: var(--warning);
+            color: #212529;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 15px;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        [data-theme="dark"] table { background: #34495e; }
+
+        th, td {
+            border: 1px solid var(--border);
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            font-weight: 600;
+        }
+
+        [data-theme="dark"] th { background-color: #3a546e; }
+
+        tr:hover { background-color: #f5f5f5; }
+        [data-theme="dark"] tr:hover { background-color: #3a546e; }
+
+        .error { color: var(--danger); margin: 10px 0; font-weight: 500; }
+        .success { color: var(--success); margin: 10px 0; }
+
+        .form-group {
+            margin: 12px 0;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .form-group label {
+            width: 220px;
+            font-weight: 500;
+        }
+
+        .form-group input[type="file"],
+        .form-group select,
+        .form-group input[type="number"] {
+            padding: 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form-group input[type="radio"] {
+            margin-right: 6px;
+        }
+
+        button {
+            margin: 10px 0;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            background: var(--primary);
+            color: white;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .sample-link {
+            font-size: 14px;
+            color: var(--primary);
+            text-decoration: underline;
+        }
+
+        #map {
+            height: 400px;
+            width: 100%;
+            margin-top: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .chart-container {
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        [data-theme="dark"] .chart-container {
+            background: #34495e;
+        }
     </style>
 </head>
 <body>
-    <h1>RF Line-of-Sight Tool (910 MHz)</h1>
+
+    <button class="theme-toggle" onclick="toggleTheme()"></button>
+
+    <h1>
+        RF Line-of-Sight Tool (910 MHz) 
+        <small style="font-size: 0.55em; color: #666;">
+            <a href="nodemgr.html" target="NodeMgr" style="color: inherit; text-decoration: underline;">Node Manager</a>
+        </small>
+    </h1>
+
+    <div class="notice">
+        Note: Your data is stored in your browser's localStorage. Download your CSV from Node Manager before clearing cache.
+    </div>
+
     <div class="form-group">
         <label>Data Source:</label>
         <input type="radio" name="dataSource" id="sourceCSV" value="csv" checked> CSV File
-        <input type="radio" name="dataSource" id="sourceGroup" value="group"> Group from <a href="nodemgr.html" target="_blank">Node Manager</a>
+        <input type="radio" name="dataSource" id="sourceGroup" value="group"> Group from Node Manager
     </div>
-    <div class="form-group" id="csvInput" style="display: block;">
+
+    <div class="form-group" id="csvInput">
         <label>Upload CSV File:</label>
         <input type="file" id="csvFile" accept=".csv">
         <br>
-        <a href="https://raw.githubusercontent.com/thatSFguy/Line-Of-Sight-Tool/main/RF_locations_sample.csv" download="RF_locations_sample.csv" class="sample-link">Download Sample CSV</a>
+        <a href="https://raw.githubusercontent.com/thatSFguy/Line-Of-Sight-Tool/main/RF_locations_sample.csv" 
+           download="RF_locations_sample.csv" class="sample-link">Download Sample CSV</a>
     </div>
+
     <div class="form-group" id="groupInput" style="display: none;">
         <label>Select Group:</label>
         <select id="groupSelect">
             <option value="">Select a group</option>
         </select>
     </div>
+
     <div class="form-group">
         <label>Default antenna height (m):</label>
-        <input type="number" id="defaultHeight" value="4">
+        <input type="number" id="defaultHeight" value="4" step="0.1">
     </div>
+
     <div class="form-group">
         <label>Diffraction loss threshold for 'Clear' LOS (dB):</label>
-        <input type="number" id="losThreshold" value="6">
+        <input type="number" id="losThreshold" value="6" step="0.1">
     </div>
+
     <button onclick="processData()">Process</button>
+
     <div id="results"></div>
     <div id="map"></div>
+
     <script>
+        // === Theme Toggle ===
+        const themeButton = document.querySelector('.theme-toggle');
+        function toggleTheme() {
+            const current = document.body.getAttribute('data-theme') || 'light';
+            const newTheme = current === 'dark' ? 'light' : 'dark';
+            document.body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeButton.innerHTML = newTheme === 'dark' ? 'Sun' : 'Moon';
+        }
+
+        // Load theme
+        let savedTheme = localStorage.getItem('theme');
+        if (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            savedTheme = 'dark';
+        }
+        if (savedTheme) {
+            document.body.setAttribute('data-theme', savedTheme);
+        }
+        themeButton.innerHTML = (document.body.getAttribute('data-theme') || 'light') === 'dark' ? 'Sun' : 'Moon';
+
+        // === Rest of your original script (unchanged logic) ===
         const FREQ_MHZ = 910;
-        const LAMBDA = 300 / FREQ_MHZ; // wavelength in m (c=3e8)
-        const EARTH_RADIUS = 6371000; // m
+        const LAMBDA = 300 / FREQ_MHZ;
+        const EARTH_RADIUS = 6371000;
         const EFFECTIVE_RADIUS_FACTOR = 4 / 3;
         const EFFECTIVE_RADIUS = EARTH_RADIUS * EFFECTIVE_RADIUS_FACTOR;
-        const HPROF_STEP = 100; // m
-        const KM_TO_MILES = 0.621371; // Conversion factor
+        const HPROF_STEP = 100;
+        const KM_TO_MILES = 0.621371;
 
-        const TILE_CACHE = new Map(); // Cache for loaded HGT data
-        const BASE_TILE_URL = 'https://raw.githubusercontent.com/thatSFguy/Line-Of-Sight-Tool/main/tiles/'; // Your repo
+        const TILE_CACHE = new Map();
+        const BASE_TILE_URL = 'https://raw.githubusercontent.com/thatSFguy/Line-Of-Sight-Tool/main/tiles/';
 
-        let map = null; // Global map variable
+        let map = null;
 
-        // Populate group dropdown
         function populateGroupDropdown() {
             const groupSelect = document.getElementById('groupSelect');
             groupSelect.innerHTML = '<option value="">Select a group</option>';
@@ -76,7 +267,6 @@
             });
         }
 
-        // Toggle input visibility based on data source
         function toggleInputVisibility(source) {
             const csvInput = document.getElementById('csvInput');
             const groupInput = document.getElementById('groupInput');
@@ -90,7 +280,6 @@
             }
         }
 
-        // Restore data source selection from localStorage
         function restoreDataSource() {
             const savedSource = localStorage.getItem('dataSource') || 'csv';
             document.getElementById('sourceCSV').checked = savedSource === 'csv';
@@ -98,7 +287,6 @@
             toggleInputVisibility(savedSource);
         }
 
-        // Save data source to localStorage and toggle visibility
         document.getElementById('sourceCSV').addEventListener('change', () => {
             localStorage.setItem('dataSource', 'csv');
             toggleInputVisibility('csv');
@@ -108,10 +296,8 @@
             toggleInputVisibility('group');
         });
 
-        // Update dropdown on focus
         document.getElementById('groupSelect').addEventListener('focus', populateGroupDropdown);
 
-        // Validate CSV data
         function validateCSV(lines) {
             if (lines.length < 2) return "CSV must have at least two rows (Site A + one Site B)";
             const headers = lines[0].map(h => String(h).trim());
@@ -121,9 +307,9 @@
             }
             const validRows = [];
             for (let i = 1; i < lines.length; i++) {
-                const row = lines[i].map(v => String(v).trim().replace(/^"(.*)"$/, '$1')); // Convert to string and strip quotes
+                const row = lines[i].map(v => String(v).trim().replace(/^"(.*)"$/, '$1'));
                 if (row.length < 3 || !row[0] || isNaN(parseFloat(row[1])) || isNaN(parseFloat(row[2]))) {
-                    continue; // Skip blank/invalid rows
+                    continue;
                 }
                 if (row.length > 3 && row[3] && isNaN(parseFloat(row[3]))) {
                     return `Invalid Height in row ${i + 1}: ${row[3]}`;
@@ -140,7 +326,6 @@
             })) };
         }
 
-        // Convert group to CSV-like data
         function groupToCSV(groupName) {
             const nodes = JSON.parse(localStorage.getItem('nodes')) || [];
             const groups = JSON.parse(localStorage.getItem('groups')) || [];
@@ -161,7 +346,6 @@
             return [headers, ...rows];
         }
 
-        // Function to get tile name for lat, lon
         function getTileName(lat, lon) {
             const latFloor = Math.floor(lat);
             const lonFloor = Math.floor(lon);
@@ -170,7 +354,6 @@
             return latStr + lonStr + '.hgt.zip';
         }
 
-        // Load and unzip HGT tile
         async function loadTile(tileName) {
             if (TILE_CACHE.has(tileName)) return TILE_CACHE.get(tileName);
             try {
@@ -178,7 +361,7 @@
                 if (!response.ok) throw new Error('Tile not found');
                 const buffer = await response.arrayBuffer();
                 const zip = await JSZip.loadAsync(buffer);
-                const hgtFile = Object.values(zip.files)[0]; // Assume one .hgt file per zip
+                const hgtFile = Object.values(zip.files)[0];
                 const hgtBuffer = await hgtFile.async('arraybuffer');
                 TILE_CACHE.set(tileName, hgtBuffer);
                 return hgtBuffer;
@@ -188,24 +371,21 @@
             }
         }
 
-        // Get elevation from HGT (1201x1201 grid, big-endian int16, voids -32768)
         async function getElevation(lat, lon) {
             const tileName = getTileName(lat, lon);
             const buffer = await loadTile(tileName);
-            if (!buffer) return 0; // Default to 0 if error
-
+            if (!buffer) return 0;
             const view = new DataView(buffer);
             const latFrac = lat - Math.floor(lat);
             const lonFrac = lon - Math.floor(lon);
-            const row = Math.floor((1 - latFrac) * 1200); // North to South
-            const col = Math.floor(lonFrac * 1200); // West to East
+            const row = Math.floor((1 - latFrac) * 1200);
+            const col = Math.floor(lonFrac * 1200);
             const index = (row * 1201 + col) * 2;
-            let elev = view.getInt16(index, false); // big-endian
-            if (elev === -32768) elev = 0; // Void fill simple
+            let elev = view.getInt16(index, false);
+            if (elev === -32768) elev = 0;
             return elev;
         }
 
-        // Haversine distance (m)
         function haversineDistance(lat1, lon1, lat2, lon2) {
             const R = 6371000;
             const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -217,9 +397,8 @@
             return R * c;
         }
 
-        // Get intermediate point on great circle
         function getIntermediatePoint(lat1, lon1, lat2, lon2, fraction) {
-            const d = haversineDistance(lat1, lon1, lat2, lon2) / EARTH_RADIUS; // angular dist
+            const d = haversineDistance(lat1, lon1, lat2, lon2) / EARTH_RADIUS;
             const a = Math.sin((1 - fraction) * d) / Math.sin(d);
             const b = Math.sin(fraction * d) / Math.sin(d);
             const x = a * Math.cos(lat1 * Math.PI/180) * Math.cos(lon1 * Math.PI/180) + b * Math.cos(lat2 * Math.PI/180) * Math.cos(lon2 * Math.PI/180);
@@ -230,7 +409,6 @@
             return {lat, lon};
         }
 
-        // Get height profile
         async function getHeightProfile(latA, lonA, latB, lonB, step) {
             const totalDist = haversineDistance(latA, lonA, latB, lonB);
             const numSteps = Math.ceil(totalDist / step) + 1;
@@ -242,44 +420,38 @@
                 const point = getIntermediatePoint(latA, lonA, latB, lonB, fraction);
                 const height = await getElevation(point.lat, point.lon);
                 heights.push(height);
-                distances.push((currentDist / 1000 * KM_TO_MILES).toFixed(1)); // Convert to miles, 1 decimal
+                distances.push((currentDist / 1000 * KM_TO_MILES).toFixed(1));
                 currentDist += totalDist / (numSteps - 1);
             }
-            return {distances, heights, totalDist: totalDist / 1000 * KM_TO_MILES}; // miles
+            return {distances, heights, totalDist: totalDist / 1000 * KM_TO_MILES};
         }
 
-        // Knife-edge diffraction loss approx
         function knifeEdgeDiffractionLoss(v) {
             if (v <= -0.78) return 0;
             return 6.9 + 20 * Math.log10(Math.sqrt((v - 0.1)**2 + 1) + (v - 0.1));
         }
 
-        // Free space loss (dB)
         function freeSpaceLoss(d_miles, freq_mhz) {
             const d_km = d_miles / KM_TO_MILES;
             return 32.45 + 20 * Math.log10(d_km) + 20 * Math.log10(freq_mhz);
         }
 
-        // Process pair
         async function processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, notesB, losThreshold) {
             const profile = await getHeightProfile(latA, lonA, latB, lonB, HPROF_STEP);
-            const distances = profile.distances; // miles, rounded
-            const heights = profile.heights; // m
-            const totalDist = profile.totalDist; // miles
+            const distances = profile.distances;
+            const heights = profile.heights;
+            const totalDist = profile.totalDist;
             heights[0] += hA;
             heights[heights.length - 1] += hB;
 
-            // Curvature adjustments
             const distances_m = distances.map(d => d / KM_TO_MILES * 1000);
             const curvature_adjust = distances_m.map(d => (d ** 2) / (2 * EFFECTIVE_RADIUS));
 
-            // LOS line (straight in adjusted space)
             const los_line = [];
             for (let i = 0; i < heights.length; i++) {
                 los_line.push(heights[0] + (heights[heights.length - 1] - heights[0]) * (distances[i] / totalDist));
             }
 
-            // Find max obstruction for knife-edge
             let maxV = -Infinity;
             let maxIndex = -1;
             for (let i = 1; i < heights.length - 1; i++) {
@@ -294,9 +466,9 @@
 
             let diffractionLoss = 0;
             if (maxIndex > -1 && maxV > 0) {
-                const d1 = distances_m[maxIndex]; // m
+                const d1 = distances_m[maxIndex];
                 const d2 = distances_m[distances_m.length - 1] - d1;
-                const h = maxV; // m
+                const h = maxV;
                 const nu = h * Math.sqrt((d1 + d2) / (LAMBDA * d1 * d2));
                 diffractionLoss = knifeEdgeDiffractionLoss(nu);
             }
@@ -305,11 +477,12 @@
             const totalLoss = fsLoss + diffractionLoss;
             const isLos = diffractionLoss < losThreshold ? 'Clear' : 'Obstructed';
 
-            // Plot (only if valid pair)
             const canvasId = 'chart_' + nameB.replace(/\s/g, '_');
             const div = document.createElement('div');
+            div.className = 'chart-container';
             div.innerHTML = `<h3>Path Profile: ${nameA} to ${nameB}</h3><canvas id="${canvasId}"></canvas>`;
             document.getElementById('results').appendChild(div);
+
             const ctx = document.getElementById(canvasId).getContext('2d');
             new Chart(ctx, {
                 type: 'line',
@@ -318,17 +491,23 @@
                     datasets: [{
                         label: 'Terrain Profile (Curvature Adjusted)',
                         data: heights.map((h, i) => h - curvature_adjust[i]),
-                        borderColor: 'black',
-                        fill: false
+                        borderColor: '#2c3e50',
+                        backgroundColor: 'rgba(44, 62, 80, 0.1)',
+                        fill: true,
+                        tension: 0.1
                     }, {
                         label: 'LOS Line',
                         data: los_line.map((l, i) => l - curvature_adjust[i]),
-                        borderColor: 'red',
-                        borderDash: [5, 5],
+                        borderColor: '#e74c3c',
+                        borderDash: [8, 4],
                         fill: false
                     }]
                 },
                 options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'top' }
+                    },
                     scales: {
                         x: { title: { display: true, text: 'Distance [miles]' } },
                         y: { title: { display: true, text: 'Height [m]' } }
@@ -339,11 +518,10 @@
             return { siteB: nameB, status: isLos, diffLoss: diffractionLoss.toFixed(2), fsLoss: fsLoss.toFixed(2), totalLoss: totalLoss.toFixed(2), latB, lonB, notesB };
         }
 
-        // Process data (CSV or group)
         async function processData() {
             const source = document.querySelector('input[name="dataSource"]:checked').value;
             const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '<p>Loading...</p>';
+            resultsDiv.innerHTML = '<p>Loading terrain data and calculating paths...</p>';
 
             let lines;
             if (source === 'csv') {
@@ -384,22 +562,19 @@
             const hA = locA['Height'] || defaultHeight;
             const notesA = locA['Notes'];
 
-            // Clear previous results and map
             resultsDiv.innerHTML = '';
-            if (map) {
-                map.remove(); // Remove old map
-            }
+            if (map) map.remove();
             const mapDiv = document.getElementById('map');
-            mapDiv.innerHTML = ''; // Clear map div
-            map = L.map('map').setView([latA, lonA], 7); // Initialize new map
+            mapDiv.innerHTML = '';
+            map = L.map('map').setView([latA, lonA], 7);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
 
-            // Process pairs
             const table = document.createElement('table');
             table.innerHTML = `<tr><th>Site B</th><th>LOS Status</th><th>Diffraction Loss (dB)</th><th>Free-Space Loss (dB)</th><th>Total Loss (dB)</th><th>Notes</th></tr>`;
             const results = [];
+
             for (let i = 1; i < data.length; i++) {
                 const locB = data[i];
                 const nameB = locB['Location Name'];
@@ -407,37 +582,34 @@
                 const lonB = locB['Longitude'];
                 const hB = locB['Height'] || defaultHeight;
                 const notesB = locB['Notes'];
-
                 const result = await processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, notesB, losThreshold);
                 results.push(result);
             }
 
-            // Add Site A marker (blue)
             L.marker([latA, lonA], {
                 icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png', iconSize: [25, 41], iconAnchor: [12, 41] })
             }).addTo(map).bindPopup(`${nameA}${notesA ? '<br>Notes: ' + notesA : ''}`);
 
-            // Add Site B markers (green) and lines to Site A (blue for Clear, red for Obstructed)
             results.forEach(r => {
                 L.marker([r.latB, r.lonB], {
                     icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41] })
                 }).addTo(map).bindPopup(`${r.siteB}${r.notesB ? '<br>Notes: ' + r.notesB : ''}`);
                 L.polyline([[latA, lonA], [r.latB, r.lonB]], { 
-                    color: r.status === 'Clear' ? 'blue' : 'red', 
-                    weight: 2 
+                    color: r.status === 'Clear' ? '#3498db' : '#e74c3c', 
+                    weight: 3,
+                    opacity: 0.8
                 }).addTo(map);
             });
 
-            // Adjust map bounds
             const bounds = [[latA, lonA], ...results.map(r => [r.latB, r.lonB])];
             map.fitBounds(bounds, { padding: [50, 50] });
 
-            // Display results table
             results.forEach(r => {
                 const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${r.siteB}</td><td>${r.status}</td><td>${r.diffLoss}</td><td>${r.fsLoss}</td><td>${r.totalLoss}</td><td>${r.notesB}</td>`;
+                tr.innerHTML = `<td>${r.siteB}</td><td><strong>${r.status}</strong></td><td>${r.diffLoss}</td><td>${r.fsLoss}</td><td>${r.totalLoss}</td><td>${r.notesB}</td>`;
                 table.appendChild(tr);
             });
+
             const div = document.createElement('div');
             div.innerHTML = `<h2>LOS Results (from Site A: ${nameA})</h2>`;
             div.appendChild(table);
