@@ -1,7 +1,10 @@
 # 📡 Line-of-Sight Tool
 
 A simple web app to help determine the best placement for mesh network nodes.
-
+Click here to use it:  https://thatsfguy.github.io/Line-Of-Sight-Tool/
+Or download the repo and use it on your own machine.
+Territory files included are MI, OH and IN.  Others you need to download yourself.
+Pull requests are welcome.
 ---
 
 ## 🚀 Features
