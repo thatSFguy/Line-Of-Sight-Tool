@@ -218,12 +218,22 @@
 
             // Plot
             const canvasId = 'chart_' + nameB.replace(/[^a-zA-Z0-9]/g, '_');
+            console.log('Creating canvas with ID:', canvasId); // Debug
             const div = document.createElement('div');
-            div.innerHTML = `<h3>Path Profile: ${nameA} to ${nameB}</h3><canvas id="${canvasId}"></canvas>`;
+            div.innerHTML = `<h3 path Profile: ${nameA} to ${nameB}</h3><canvas id="${canvasId}"></canvas>`;
             document.getElementById('results').appendChild(div);
-            const ctx = document.getElementById(canvasId).getContext('2d');
+
+            // Ensure canvas exists before accessing
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) {
+                document.getElementById('results').innerHTML += `<p class="error">Error: Canvas element ${canvasId} not found.</p>`;
+                console.error('Canvas element not found:', canvasId);
+                return { siteB: nameB, status: isLos, diffLoss: diffractionLoss.toFixed(2), fsLoss: fsLoss.toFixed(2), totalLoss: totalLoss.toFixed(2), latB, lonB, notesB };
+            }
+
+            const ctx = canvas.getContext('2d');
             new Chart(ctx, {
-                type: 'line',
+                path: 'line',
                 data: {
                     labels: distances,
                     datasets: [{
