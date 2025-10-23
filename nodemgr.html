@@ -1,314 +1,1333 @@
 <!DOCTYPE html>
+
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
+
     <title>Node Manager</title>
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <style>
-        body {font-family: Arial, sans-serif; margin:20px;}
-        h1 {margin-bottom:5px;}
-        .note {color:#b00; font-size:0.9em; margin-bottom:15px;}
-        .form-group {margin:10px 0;}
-        label {display:inline-block; width:130px;}
-        input, select {width:200px;}
-        button {margin:5px 0;}
-        #map {height:400px; margin-top:20px;}
-        table {border-collapse:collapse; width:100%; margin-top:15px;}
-        th, td {border:1px solid #ccc; padding:6px; text-align:left;}
-        th {background:#f0f0f0;}
-        .icon {cursor:pointer; margin:0 4px; font-size:1.2em;}
-        .icon:hover {color:#c00;}
+
+
+        body { font-family: Arial, sans-serif; margin: 20px; }
+
+
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+
+
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+
+
+        th { background-color: #f2f2f2; }
+
+
+        .error { color: red; margin: 10px 0; }
+
+
+        .form-group { margin: 10px 0; }
+
+
+        .form-group label { display: inline-block; width: 100px; }
+
+
+        .form-group input, .form-group textarea { width: 150px; }
+
+
+        button { margin: 5px; padding: 8px 16px; }
+
+
+        .controls { margin-top: 10px; }
+
+
+        .container { display: flex; flex-direction: row; gap: 20px; flex-wrap: wrap; }
+
+
+        .form-container { flex: 0 0 25%; min-width: 150px; }
+
+
+        .map-container { flex: 0 0 55%; min-width: 300px; }
+
+
+        #map { height: 350px; width: 100%; }
+
+
+        .map-instructions { font-size: 14px; color: #555; margin-bottom: 10px; }
+
+
+        .trash-btn, .edit-btn, .download-btn { cursor: pointer; font-size: 16px; }
+
+
+        .trash-btn { color: red; }
+
+
+        .edit-btn { color: blue; margin-right: 10px; }
+
+
+        .download-btn { color: green; }
+
     </style>
+
 </head>
+
 <body>
+
     <h1>Node Manager</h1>
-    <p class="note">
-        <strong>Important:</strong> All data is stored ONLY in your browser (localStorage). 
-        Download your CSV before clearing your cache or using a different browser!
-    </p>
 
-    <!-- ==== NODE ENTRY ==== -->
-    <div class="form-group">
-        <label for="nodeName">Node Name:</label>
-        <input type="text" id="nodeName" placeholder="e.g. BASE">
-    </div>
-    <div class="form-group">
-        <label for="lat">Latitude:</label>
-        <input type="number" step="any" id="lat" placeholder="e.g. 43.183">
-    </div>
-    <div class="form-group">
-        <label for="lon">Longitude:</label>
-        <input type="number" step="any" id="lon" placeholder="e.g. -85.5">
-    </div>
-    <div class="form-group">
-        <label for="height">Height (m):</label>
-        <input type="number" id="height" placeholder="optional">
-    </div>
-    <div class="form-group">
-        <label for="notes">Notes:</label>
-        <input type="text" id="notes" placeholder="optional">
-    </div>
-    <div class="form-group">
-        <label for="primary">Primary Node:</label>
-        <input type="checkbox" id="primary">
-    </div>
-    <button id="addNode">Add / Update Node</button>
 
-    <!-- ==== GROUP MANAGEMENT ==== -->
-    <hr>
-    <h2>Groups</h2>
-    <div class="form-group">
-        <label for="groupName">Group Name:</label>
-        <input type="text" id="groupName" placeholder="e.g. BASE">
-    </div>
-    <div class="form-group">
-        <label>Include Nodes:</label><br>
-        <div id="nodeCheckboxes"></div>
-    </div>
-    <button id="createGroup">Create Group</button>
+    <div class="container">
 
-    <!-- ==== GROUP LIST ==== -->
-    <h3>Existing Groups</h3>
-    <table id="groupTable">
-        <thead><tr><th>Group</th><th>Nodes</th><th>Actions</th></tr></thead>
-        <tbody></tbody>
+
+        <div class="form-container">
+
+
+            <div class="form-group">
+
+
+                <label>Location Name:</label>
+
+
+                <input type="text" id="name" placeholder="e.g., Site A">
+
+
+            </div>
+
+
+            <div class="form-group">
+
+
+                <label>Latitude:</label>
+
+
+                <input type="number" step="any" id="latitude" placeholder="e.g., 39.9612">
+
+
+            </div>
+
+
+            <div class="form-group">
+
+
+                <label>Longitude:</label>
+
+
+                <input type="number" step="any" id="longitude" placeholder="e.g., -82.9988">
+
+
+            </div>
+
+
+            <div class="form-group">
+
+
+                <label>Height (m):</label>
+
+
+                <input type="number" step="any" id="height" placeholder="e.g., 10">
+
+
+            </div>
+
+
+            <div class="form-group">
+
+
+                <label>Notes:</label>
+
+
+                <textarea id="notes" placeholder="e.g., blah"></textarea>
+
+
+            </div>
+
+
+            <div id="form-buttons">
+
+
+                <button id="addNodeBtn" onclick="addNode()">Add Node</button>
+
+
+                <button id="cancelBtn" style="display: none;" onclick="cancelEdit()">Cancel</button>
+
+
+            </div>
+
+
+            <div class="controls">
+
+
+                <button onclick="triggerCSVUpload()">Upload CSV</button>
+
+
+                <button onclick="downloadCSV()">Download CSV</button>
+
+
+                <button onclick="createGroup()">Create Group</button>
+
+
+            </div>
+
+
+            <div id="error" class="error"></div>
+
+
+        </div>
+
+
+        <div class="map-container">
+
+
+            <div class="map-instructions">Click on the map to auto-fill Latitude and Longitude.</div>
+
+
+            <div id="map"></div>
+
+
+        </div>
+
+    </div>
+
+
+    <h2>Nodes</h2>
+
+
+    <table id="nodeTable">
+
+
+        <thead>
+
+
+            <tr>
+
+
+                <th>Include</th>
+
+
+                <th>Primary</th>
+
+
+                <th>Location Name</th>
+
+
+                <th>Latitude</th>
+
+
+                <th>Longitude</th>
+
+
+                <th>Height (m)</th>
+
+
+                <th>Notes</th>
+
+
+                <th>Actions</th>
+
+
+            </tr>
+
+
+        </thead>
+
+
+        <tbody id="nodeTableBody"></tbody>
+
+
     </table>
 
-    <!-- ==== CLEAR ALL ==== -->
-    <hr>
-    <button id "clearAll" style="background:#c00;color:#fff;">Clear All Data</button>
 
-    <div id="map"></div>
+
+
+
+
+
+
+
+    <h2>Groups</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <table id="groupTable">
+
+
+        <thead>
+
+
+            <tr>
+
+
+                <th>Group Name</th>
+
+
+                <th>Included Nodes</th>
+
+
+                <th>Download</th>
+
+
+            </tr>
+
+
+        </thead>
+
+
+        <tbody id="groupTableBody"></tbody>
+
+    </table>
+
+
+
+
+
+
+
 
     <script>
-        // ---------- Leaflet map ----------
-        const map = L.map('map').setView([40, -100], 4);
+
+
+        // Initialize nodes and groups from localStorage or sample data
+
+
+        const initialNodes = [
+
+
+            { name: 'Site A', latitude: 39.9612, longitude: -82.9988, height: 10, notes: 'blah', included: false, primary: false },
+
+
+            { name: 'Site B', latitude: 45.4215, longitude: -75.6972, height: 15, notes: 'bleh', included: false, primary: false },
+
+
+            { name: 'Site C', latitude: 19.4326, longitude: -99.1332, height: 12, notes: 'nothing', included: false, primary: false }
+
+
+        ];
+
+
+        let nodes = JSON.parse(localStorage.getItem('nodes')) || initialNodes;
+
+
+        let groups = JSON.parse(localStorage.getItem('groups')) || [];
+
+
+        let editIndex = null;
+
+
+
+
+
+        // Initialize Leaflet map
+
+
+        let map = L.map('map').setView([0, 0], 2);
+
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
+
+
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+
         }).addTo(map);
 
-        const primaryIcon = L.icon({
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
-            iconSize: [25,41], iconAnchor: [12,41]
-        });
-        const secondaryIcon = L.icon({
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
-            iconSize: [25,41], iconAnchor: [12,41]
+
+
+
+        // Center map on user's geolocation
+
+
+        if (navigator.geolocation) {
+
+
+            navigator.geolocation.getCurrentPosition(
+
+
+                position => {
+
+
+                    const { latitude, longitude } = position.coords;
+
+
+                    map.setView([latitude, longitude], 10);
+
+
+                },
+
+
+                error => {
+
+
+                    console.error('Geolocation error:', error);
+
+
+                    const validNodes = nodes.filter(n => !isNaN(n.latitude) && !isNaN(n.longitude));
+
+
+                    if (validNodes.length > 0) {
+
+
+                        const avgLat = validNodes.reduce((sum, n) => sum + n.latitude, 0) / validNodes.length;
+
+
+                        const avgLon = validNodes.reduce((sum, n) => sum + n.longitude, 0) / validNodes.length;
+
+
+                        map.setView([avgLat, avgLon], 5);
+
+
+                    }
+
+
+                }
+
+
+            );
+
+
+        } else {
+
+
+            const validNodes = nodes.filter(n => !isNaN(n.latitude) && !isNaN(n.longitude));
+
+
+            if (validNodes.length > 0) {
+
+
+                const avgLat = validNodes.reduce((sum, n) => sum + n.latitude, 0) / validNodes.length;
+
+
+                const avgLon = validNodes.reduce((sum, n) => sum + n.longitude, 0) / validNodes.length;
+
+
+                map.setView([avgLat, avgLon], 5);
+
+
+            }
+
+
+        }
+
+
+
+
+
+        // Auto-populate lat/lon on map click
+
+
+        map.on('click', function(e) {
+
+
+            document.getElementById('latitude').value = e.latlng.lat.toFixed(6);
+
+
+            document.getElementById('longitude').value = e.latlng.lng.toFixed(6);
+
         });
 
-        // ---------- LocalStorage helpers ----------
-        function getNodes() { return JSON.parse(localStorage.getItem('nodes') || '[]'); }
-        function saveNodes(arr) { localStorage.setItem('nodes', JSON.stringify(arr)); }
-        function getGroups() { return JSON.parse(localStorage.getItem('groups') || '[]'); }
-        function saveGroups(arr) { localStorage.setItem('groups', JSON.stringify(arr)); }
 
-        // ---------- Render nodes on map ----------
-        function renderMap() {
-            map.eachLayer(l => { if (l instanceof L.Marker) map.removeLayer(l); });
-            const nodes = getNodes();
-            nodes.forEach(n => {
-                const marker = L.marker([n.latitude, n.longitude], {
-                    icon: n.primary ? primaryIcon : secondaryIcon
-                }).addTo(map)
-                  .bindPopup(`${n.name}<br>${n.notes||''}`);
+
+
+        // Render node table
+
+
+        function renderNodeTable() {
+
+
+            const tbody = document.getElementById('nodeTableBody');
+
+
+            tbody.innerHTML = '';
+
+
+            nodes.forEach((node, index) => {
+
+
+                const row = document.createElement('tr');
+
+
+                row.innerHTML = `
+
+
+                    <td><input type="checkbox" ${node.included ? 'checked' : ''} onchange="updateIncluded(${index}, this.checked)"></td>
+
+
+                    <td><input type="radio" name="primary" ${node.primary ? 'checked' : ''} onchange="setPrimary(${index})"></td>
+
+
+                    <td>${node.name}</td>
+
+
+                    <td>${node.latitude}</td>
+
+
+                    <td>${node.longitude}</td>
+
+
+                    <td>${node.height || ''}</td>
+
+
+                    <td>${node.notes || ''}</td>
+
+
+                    <td>
+
+
+                        <span class="edit-btn" onclick="editNode(${index})">✏️</span>
+
+
+                        <span class="trash-btn" onclick="deleteNode(${index})">🗑️</span>
+
+
+                    </td>
+
+
+                `;
+
+
+                tbody.appendChild(row);
+
+
             });
-            if (nodes.length) {
-                const group = new L.featureGroup(nodes.map(n=>L.marker([n.latitude,n.longitude])));
-                map.fitBounds(group.getBounds().pad(0.2));
-            }
+
+
+            localStorage.setItem('nodes', JSON.stringify(nodes));
+
+
         }
 
-        // ---------- Node CRUD ----------
-        document.getElementById('addNode').addEventListener('click', () => {
-            const name = document.getElementById('nodeName').value.trim();
-            const lat = parseFloat(document.getElementById('lat').value);
-            const lon = parseFloat(document.getElementById('lon').value);
-            const height = document.getElementById('height').value.trim() ? parseFloat(document.getElementById('height').value) : null;
-            const notes = document.getElementById('notes').value.trim();
-            const primary = document.getElementById('primary').checked;
 
-            if (!name || isNaN(lat) || isNaN(lon)) {
-                alert('Name, Latitude and Longitude are required.');
-                return;
-            }
 
-            const nodes = getNodes();
-            const existingIdx = nodes.findIndex(n => n.name === name);
-            const nodeObj = {name, latitude:lat, longitude:lon, height, notes, primary};
 
-            if (existingIdx > -1) {
-                nodes[existingIdx] = nodeObj;               // update
-            } else {
-                nodes.push(nodeObj);                        // add
-            }
-            saveNodes(nodes);
-            renderCheckboxes();
-            renderMap();
-            clearNodeForm();
-        });
+        // Render group table
 
-        function clearNodeForm() {
-            document.getElementById('nodeName').value = '';
-            document.getElementById('lat').value = '';
-            document.getElementById('lon').value = '';
-            document.getElementById('height').value = '';
-            document.getElementById('notes').value = '';
-            document.getElementById('primary').checked = false;
-        }
-
-        // ---------- Group UI ----------
-        let editingGroup = null;   // holds group name when editing
-
-        function renderCheckboxes() {
-            const container = document.getElementById('nodeCheckboxes');
-            container.innerHTML = '';
-            const nodes = getNodes();
-            nodes.forEach(node => {
-                const div = document.createElement('div');
-                const cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.value = node.name;
-                cb.id = 'cb_' + node.name.replace(/\s/g,'_');
-                const lbl = document.createElement('label');
-                lbl.htmlFor = cb.id;
-                lbl.textContent = node.name + (node.primary ? ' (primary)' : '');
-                div.appendChild(cb);
-                div.appendChild(lbl);
-                container.appendChild(div);
-            });
-        }
 
         function renderGroupTable() {
-            const tbody = document.querySelector('#groupTable tbody');
+
+
+            const tbody = document.getElementById('groupTableBody');
+
+
             tbody.innerHTML = '';
-            const groups = getGroups();
-            groups.forEach(g => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${g.name}</td>
-                    <td>${g.nodes.join(', ')}</td>
-                    <td>
-                        <span class="icon" title="Edit" onclick="editGroup('${g.name}')">Edit</span>
-                        <span class="icon" title="Download CSV" onclick="downloadGroup('${g.name}')">Download</span>
-                        <span class="icon" title="Delete" onclick="deleteGroup('${g.name}')">Delete</span>
-                    </td>`;
-                tbody.appendChild(tr);
+
+
+            groups.forEach((group, index) => {
+
+
+                const row = document.createElement('tr');
+
+
+                row.innerHTML = `
+
+
+                    <td>${group.name}</td>
+
+
+                    <td>${group.nodes.join(', ') || 'None'}</td>
+
+
+                    <td><span class="download-btn" onclick="downloadGroupCSV(${index})">⬇️</span></td>
+
+
+                `;
+
+
+                tbody.appendChild(row);
+
             });
+
+
+            localStorage.setItem('groups', JSON.stringify(groups));
+
+
+
+
         }
 
-        // ----- Create / Update Group -----
-        document.getElementById('createGroup').addEventListener('click', () => {
-            const name = document.getElementById('groupName').value.trim();
-            if (!name) { alert('Group name required.'); return; }
 
-            const checked = Array.from(document.querySelectorAll('#nodeCheckboxes input:checked'))
-                                 .map(cb => cb.value);
-            if (checked.length < 1) { alert('Select at least one node.'); return; }
 
-            const groups = getGroups();
-            const idx = groups.findIndex(g => g.name === name);
 
-            const groupObj = {name, nodes: checked};
+        // Add or update node
 
-            if (editingGroup) {
-                // ---- UPDATE ----
-                if (idx > -1) groups[idx] = groupObj;
-                else { alert('Group name changed – treating as new group.'); groups.push(groupObj); }
-                editingGroup = null;
-                document.getElementById('createGroup').textContent = 'Create Group';
+
+        function addNode() {
+
+
+            const name = document.getElementById('name').value.trim();
+
+
+            const latitude = parseFloat(document.getElementById('latitude').value);
+
+
+            const longitude = parseFloat(document.getElementById('longitude').value);
+
+
+            const height = parseFloat(document.getElementById('height').value);
+
+            const notes = document.getElementById('notes').value.trim();
+
+
+
+
+
+            if (!name || isNaN(latitude) || isNaN(longitude)) {
+
+
+                document.getElementById('error').textContent = 'Location Name, Latitude, and Longitude are required and must be valid.';
+
+                return;
+
+            }
+
+
+
+
+            if (editIndex !== null) {
+
+
+                const oldName = nodes[editIndex].name;
+
+
+                nodes[editIndex] = {
+
+
+                    name,
+
+
+                    latitude,
+
+
+                    longitude,
+
+
+                    height: isNaN(height) ? null : height,
+
+
+                    notes: notes || '',
+
+
+                    included: nodes[editIndex].included,
+
+
+                    primary: nodes[editIndex].primary
+
+
+                };
+
+
+                groups.forEach(group => {
+
+
+                    if (group.name === oldName) group.name = name;
+
+
+                    group.nodes = group.nodes.map(n => n === oldName ? name : n);
+
+
+                });
+
+
+                editIndex = null;
+
+
+                document.getElementById('addNodeBtn').textContent = 'Add Node';
+
+
+                document.getElementById('cancelBtn').style.display = 'none';
+
             } else {
-                // ---- CREATE ----
-                if (idx > -1) { alert('Group already exists – use Edit.'); return; }
-                groups.push(groupObj);
+
+
+                nodes.push({
+
+
+                    name,
+
+
+                    latitude,
+
+
+                    longitude,
+
+
+                    height: isNaN(height) ? null : height,
+
+
+                    notes: notes || '',
+
+
+                    included: false,
+
+
+                    primary: false
+
+
+                });
+
             }
-            saveGroups(groups);
+
+
+
+
+
+
+
+
+
+            document.getElementById('name').value = '';
+
+
+            document.getElementById('latitude').value = '';
+
+
+            document.getElementById('longitude').value = '';
+
+
+            document.getElementById('height').value = '';
+
+            document.getElementById('notes').value = '';
+
+
+            document.getElementById('error').textContent = '';
+
+
+
+
+
+            renderNodeTable();
+
+
             renderGroupTable();
-            clearGroupForm();
-        });
 
-        window.editGroup = function(name) {
-            const groups = getGroups();
-            const grp = groups.find(g => g.name === name);
-            if (!grp) return;
-
-            document.getElementById('groupName').value = grp.name;
-            // uncheck all
-            document.querySelectorAll('#nodeCheckboxes input').forEach(cb=>cb.checked=false);
-            // check belonging nodes
-            grp.nodes.forEach(n => {
-                const cb = document.getElementById('cb_' + n.replace(/\s/g,'_'));
-                if (cb) cb.checked = true;
-            });
-
-            editingGroup = name;
-            document.getElementById('createGroup').textContent = 'Update Group';
-        };
-
-        // ----- Download CSV -----
-        window.downloadGroup = function(name) {
-            const nodes = getNodes();
-            const groups = getGroups();
-            const grp = groups.find(g => g.name === name);
-            if (!grp) return;
-
-            const primary = nodes.find(n => n.name === name);
-            const members = nodes.filter(n => grp.nodes.includes(n.name));
-            const all = primary ? [primary, ...members] : members;
-
-            const headers = ['Location Name','Latitude','Longitude','Height','Notes'];
-            const rows = all.map(n => [
-                `"${n.name.replace(/"/g,'""')}"`,
-                n.latitude,
-                n.longitude,
-                n.height ?? '',
-                `"${(n.notes||'').replace(/"/g,'""')}"`
-            ]);
-            const csv = [headers, ...rows.map(r=>r.join(','))].join('\n');
-
-            const blob = new Blob([csv], {type:'text/csv'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = `${name}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-        };
-
-        // ----- Delete Group -----
-        window.deleteGroup = function(name) {
-            if (!confirm(`Delete group "${name}"? This cannot be undone.`)) return;
-            const groups = getGroups().filter(g => g.name !== name);
-            saveGroups(groups);
-            renderGroupTable();
-        };
-
-        function clearGroupForm() {
-            document.getElementById('groupName').value = '';
-            document.querySelectorAll('#nodeCheckboxes input').forEach(cb=>cb.checked=false);
-            editingGroup = null;
-            document.getElementById('createGroup').textContent = 'Create Group';
         }
 
-        // ----- Clear All Data -----
-        document.getElementById('clearAll').addEventListener('click', () => {
-            const msg = `WARNING: This will erase ALL nodes and groups from your browser.\n` +
-                        `Download any CSV you need first!\n\n` +
-                        `Are you sure?`;
-            if (confirm(msg)) {
-                localStorage.removeItem('nodes');
-                localStorage.removeItem('groups');
-                renderCheckboxes();
-                renderGroupTable();
-                renderMap();
-                clearNodeForm();
-                clearGroupForm();
-            }
-        });
 
-        // ---------- Init ----------
-        renderCheckboxes();
+
+
+        // Edit node
+
+
+        function editNode(index) {
+
+
+            const node = nodes[index];
+
+
+            document.getElementById('name').value = node.name;
+
+
+            document.getElementById('latitude').value = node.latitude;
+
+
+            document.getElementById('longitude').value = node.longitude;
+
+
+            document.getElementById('height').value = node.height || '';
+
+
+            document.getElementById('notes').value = node.notes || '';
+
+
+            document.getElementById('addNodeBtn').textContent = 'Save';
+
+
+            document.getElementById('cancelBtn').style.display = 'inline';
+
+
+            editIndex = index;
+
+
+        }
+
+
+
+
+        // Cancel edit
+
+
+        function cancelEdit() {
+
+
+            document.getElementById('name').value = '';
+
+
+            document.getElementById('latitude').value = '';
+
+
+            document.getElementById('longitude').value = '';
+
+
+            document.getElementById('height').value = '';
+
+
+            document.getElementById('notes').value = '';
+
+
+            document.getElementById('addNodeBtn').textContent = 'Add Node';
+
+
+            document.getElementById('cancelBtn').style.display = 'none';
+
+
+            document.getElementById('error').textContent = '';
+
+
+            editIndex = null;
+
+
+        }
+
+
+
+
+
+        // Update included status
+
+
+        function updateIncluded(index, checked) {
+
+
+            nodes[index].included = checked;
+
+
+            if (nodes[index].primary) nodes[index].included = true;
+
+
+            renderNodeTable();
+
+        }
+
+
+
+
+        // Set primary node
+
+
+        function setPrimary(index) {
+
+
+            nodes.forEach((node, i) => {
+
+
+                node.primary = (i === index);
+
+
+                if (i === index) node.included = true;
+
+
+
+
+
+
+
+
+
+
+
+            });
+
+
+            renderNodeTable();
+
+        }
+
+
+
+
+        // Delete node with confirmation
+
+
+        function deleteNode(index) {
+
+
+            if (nodes[index].primary) {
+
+
+                document.getElementById('error').textContent = 'Cannot delete the primary node.';
+
+
+                return;
+
+
+            }
+
+
+            if (confirm(`Are you sure you want to delete "${nodes[index].name}"?`)) {
+
+
+                const nodeName = nodes[index].name;
+
+
+                nodes.splice(index, 1);
+
+
+                groups = groups.filter(group => group.name !== nodeName);
+
+
+                groups.forEach(group => {
+
+
+                    group.nodes = group.nodes.filter(n => n !== nodeName);
+
+
+                });
+
+
+                document.getElementById('error').textContent = '';
+
+
+                renderNodeTable();
+
+
+                renderGroupTable();
+
+
+            }
+
+
+        }
+
+
+
+
+        // Create group
+
+
+        function createGroup() {
+
+
+            const primaryNode = nodes.find(n => n.primary);
+
+
+            const includedNodes = nodes.filter(n => n.included && !n.primary);
+
+
+            if (!primaryNode) {
+
+
+                document.getElementById('error').textContent = 'Please select a Primary node.';
+
+
+                return;
+
+
+            }
+
+
+            if (includedNodes.length === 0) {
+
+
+                document.getElementById('error').textContent = 'Please select at least one Included node.';
+
+
+                return;
+
+
+            }
+
+
+            if (groups.some(g => g.name === primaryNode.name)) {
+
+
+                document.getElementById('error').textContent = `Group "${primaryNode.name}" already exists.`;
+
+
+                return;
+
+
+
+
+
+            }
+
+
+            groups.push({
+
+
+                name: primaryNode.name,
+
+
+                nodes: includedNodes.map(n => n.name)
+
+
+            });
+
+
+            document.getElementById('error').textContent = '';
+
+            renderGroupTable();
+
+
+        }
+
+
+
+
+
+        // Download all nodes as CSV
+
+
+        function downloadCSV() {
+
+
+            const headers = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
+
+
+            const rows = nodes.map(node => [
+
+
+                `"${node.name.replace(/"/g, '""')}"`,
+
+
+                node.latitude,
+
+
+                node.longitude,
+
+
+                node.height || '',
+
+
+                `"${(node.notes || '').replace(/"/g, '""')}"`
+
+
+            ].join(','));
+
+
+            const csv = [headers.join(','), ...rows].join('\n');
+
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+
+
+            const url = URL.createObjectURL(blob);
+
+
+            const a = document.createElement('a');
+
+
+            a.href = url;
+
+
+            a.download = 'nodes.csv';
+
+
+            a.click();
+
+
+            URL.revokeObjectURL(url);
+
+
+        }
+
+
+
+
+        // Download group as CSV
+
+
+        function downloadGroupCSV(groupIndex) {
+
+
+            const group = groups[groupIndex];
+
+
+            const primaryNode = nodes.find(node => node.name === group.name);
+
+
+            const includedNodes = nodes.filter(node => group.nodes.includes(node.name));
+
+
+            const groupNodes = primaryNode ? [primaryNode, ...includedNodes] : includedNodes;
+
+
+            const headers = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
+
+
+            const rows = groupNodes.map(node => [
+
+
+                `"${node.name.replace(/"/g, '""')}"`,
+
+
+                node.latitude,
+
+
+                node.longitude,
+
+
+                node.height || '',
+
+
+                `"${(node.notes || '').replace(/"/g, '""')}"`
+
+
+            ].join(','));
+
+
+            const csv = [headers.join(','), ...rows].join('\n');
+
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+
+
+
+
+
+
+
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+
+
+            a.href = url;
+
+
+            a.download = `${group.name}.csv`;
+
+            a.click();
+
+            URL.revokeObjectURL(url);
+
+
+        }
+
+
+
+
+        // Trigger CSV upload popup
+
+
+        function triggerCSVUpload() {
+
+
+            const input = document.createElement('input');
+
+
+            input.type = 'file';
+
+
+            input.accept = '.csv';
+
+
+            input.onchange = function(e) {
+
+
+                const file = e.target.files[0];
+
+
+                if (!file) {
+
+
+                    document.getElementById('error').textContent = 'No file selected.';
+
+
+                    return;
+
+
+                }
+
+
+                uploadCSV(file);
+
+
+            };
+
+
+            input.click();
+
+        }
+
+
+
+
+        // Upload CSV with replace/append prompt
+
+
+        function uploadCSV(file) {
+
+
+            const reader = new FileReader();
+
+
+            reader.onload = function(e) {
+
+
+                const text = e.target.result;
+
+
+                const lines = text.split('\n').map(l => l.trim().split(','));
+
+
+                if (lines.length < 1) {
+
+
+                    document.getElementById('error').textContent = 'CSV is empty.';
+
+
+                    return;
+
+
+                }
+
+
+                const headers = lines[0].map(h => h.trim());
+
+
+                const expected = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
+
+
+                if (!headers.every((h, i) => h === expected[i] || (i === 4 && h === 'Notes'))) {
+
+
+                    document.getElementById('error').textContent = 'CSV headers must be: Location Name,Latitude,Longitude,Height,Notes (Notes optional)';
+
+
+                    return;
+
+
+                }
+
+
+                const newNodes = [];
+
+
+                for (let i = 1; i < lines.length; i++) {
+
+
+                    const row = lines[i].map(v => v.trim());
+
+
+                    if (row.length < 3 || !row[0] || isNaN(parseFloat(row[1])) || isNaN(parseFloat(row[2]))) {
+
+
+                        continue;
+
+
+                    }
+
+
+                    const height = row[3] ? parseFloat(row[3]) : null;
+
+
+                    if (row[3] && isNaN(height)) {
+
+
+                        document.getElementById('error').textContent = `Invalid Height in row ${i + 1}: ${row[3]}`;
+
+
+                        return;
+
+
+                    }
+
+
+                    newNodes.push({
+
+
+                        name: row[0],
+
+
+                        latitude: parseFloat(row[1]),
+
+
+                        longitude: parseFloat(row[2]),
+
+
+                        height: height,
+
+
+                        notes: row[4] || '',
+
+
+                        included: false,
+
+
+                        primary: false
+
+
+                    });
+
+
+                }
+
+
+                if (newNodes.length === 0) {
+
+
+                    document.getElementById('error').textContent = 'No valid data rows in CSV.';
+
+
+                    return;
+
+
+                }
+
+
+                const replace = confirm('Replace existing nodes with uploaded data? Click OK to replace, Cancel to append.');
+
+
+                if (replace) {
+
+
+                    nodes = newNodes;
+
+
+                    groups = [];
+
+
+                } else {
+
+
+                    nodes = [...nodes, ...newNodes];
+
+
+                }
+
+
+                document.getElementById('error').textContent = '';
+
+
+                renderNodeTable();
+
+                renderGroupTable();
+
+
+            };
+
+
+            reader.readAsText(file);
+
+
+        }
+
+
+
+
+
+
+        // Initial render
+
+
+        renderNodeTable();
+
         renderGroupTable();
-        renderMap();
+
+
     </script>
+
 </body>
+
 </html>
