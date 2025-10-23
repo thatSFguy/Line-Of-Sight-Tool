@@ -24,7 +24,7 @@
     <div class="form-group">
         <label>Data Source:</label>
         <input type="radio" name="dataSource" id="sourceCSV" value="csv" checked> CSV File
-        <input type="radio" name="dataSource" id="sourceGroup" value="group"> Group from Node Manager
+        <input type="radio" name="dataSource" id="sourceGroup" value="group"> Group from <a href="nodemgr.html" target="_blank">Node Manager</a>
     </div>
     <div class="form-group" id="csvInput" style="display: block;">
         <label>Upload CSV File:</label>
@@ -40,7 +40,7 @@
     </div>
     <div class="form-group">
         <label>Default antenna height (m):</label>
-        <input type="number" id="defaultHeight" value="10">
+        <input type="number" id="defaultHeight" value="4">
     </div>
     <div class="form-group">
         <label>Diffraction loss threshold for 'Clear' LOS (dB):</label>
@@ -77,14 +77,35 @@
         }
 
         // Toggle input visibility based on data source
+        function toggleInputVisibility(source) {
+            const csvInput = document.getElementById('csvInput');
+            const groupInput = document.getElementById('groupInput');
+            if (source === 'group') {
+                csvInput.style.display = 'none';
+                groupInput.style.display = 'block';
+                populateGroupDropdown();
+            } else {
+                csvInput.style.display = 'block';
+                groupInput.style.display = 'none';
+            }
+        }
+
+        // Restore data source selection from localStorage
+        function restoreDataSource() {
+            const savedSource = localStorage.getItem('dataSource') || 'csv';
+            document.getElementById('sourceCSV').checked = savedSource === 'csv';
+            document.getElementById('sourceGroup').checked = savedSource === 'group';
+            toggleInputVisibility(savedSource);
+        }
+
+        // Save data source to localStorage and toggle visibility
         document.getElementById('sourceCSV').addEventListener('change', () => {
-            document.getElementById('csvInput').style.display = 'block';
-            document.getElementById('groupInput').style.display = 'none';
+            localStorage.setItem('dataSource', 'csv');
+            toggleInputVisibility('csv');
         });
         document.getElementById('sourceGroup').addEventListener('change', () => {
-            document.getElementById('csvInput').style.display = 'none';
-            document.getElementById('groupInput').style.display = 'block';
-            populateGroupDropdown();
+            localStorage.setItem('dataSource', 'group');
+            toggleInputVisibility('group');
         });
 
         // Validate CSV data
@@ -128,11 +149,11 @@
             if (groupNodes.length < 2) return null;
             const headers = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
             const rows = groupNodes.map(node => [
-                String(node.name),                    // Ensure string
-                String(node.latitude),                // Ensure string
-                String(node.longitude),               // Ensure string
-                String(node.height || ''),            // Ensure string, empty if null
-                String(node.notes || '')              // Ensure string, empty if null
+                String(node.name),
+                String(node.latitude),
+                String(node.longitude),
+                String(node.height || ''),
+                String(node.notes || '')
             ]);
             return [headers, ...rows];
         }
@@ -421,7 +442,7 @@
         }
 
         // Initial setup
-        populateGroupDropdown();
+        restoreDataSource();
     </script>
 </body>
 </html>
