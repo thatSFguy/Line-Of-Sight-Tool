@@ -90,14 +90,14 @@
         // Validate CSV data
         function validateCSV(lines) {
             if (lines.length < 2) return "CSV must have at least two rows (Site A + one Site B)";
-            const headers = lines[0].map(h => h.trim());
+            const headers = lines[0].map(h => String(h).trim());
             const expected = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
             if (!headers.every((h, i) => h === expected[i])) {
                 return "CSV headers must be: Location Name,Latitude,Longitude,Height,Notes";
             }
             const validRows = [];
             for (let i = 1; i < lines.length; i++) {
-                const row = lines[i].map(v => v.trim().replace(/^"(.*)"$/, '$1')); // Strip quotes
+                const row = lines[i].map(v => String(v).trim().replace(/^"(.*)"$/, '$1')); // Convert to string and strip quotes
                 if (row.length < 3 || !row[0] || isNaN(parseFloat(row[1])) || isNaN(parseFloat(row[2]))) {
                     continue; // Skip blank/invalid rows
                 }
@@ -128,11 +128,11 @@
             if (groupNodes.length < 2) return null;
             const headers = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
             const rows = groupNodes.map(node => [
-                `"${node.name.replace(/"/g, '""')}"`,
-                node.latitude,
-                node.longitude,
-                node.height || '',
-                `"${(node.notes || '').replace(/"/g, '""')}"`
+                String(node.name),                    // Ensure string
+                String(node.latitude),                // Ensure string
+                String(node.longitude),               // Ensure string
+                String(node.height || ''),            // Ensure string, empty if null
+                String(node.notes || '')              // Ensure string, empty if null
             ]);
             return [headers, ...rows];
         }
