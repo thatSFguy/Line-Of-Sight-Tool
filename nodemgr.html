@@ -473,16 +473,44 @@
         }
 
         // === Groups ===
+        // === Create group (with overwrite prompt) ===
         function createGroup() {
             clearMessages();
+        
             const primary = nodes.find(n => n.primary);
             const included = nodes.filter(n => n.included && !n.primary);
-            if (!primary) return showError('Select a Primary node.');
-            if (included.length === 0) return showError('Select at least one Included node.');
-            if (groups.some(g => g.name === primary.name)) return showError(`Group "${primary.name}" already exists.`);
-
-            groups.push({ name: primary.name, nodes: included.map(n => n.name) });
-            showSuccess(`Group "${primary.name}" created!`);
+        
+            if (!primary) {
+                showError('Select a Primary node.');
+                return;
+            }
+            if (included.length === 0) {
+                showError('Select at least one Included node.');
+                return;
+            }
+        
+            const existingIdx = groups.findIndex(g => g.name === primary.name);
+        
+            if (existingIdx !== -1) {
+                // ----- OVERWRITE PROMPT -----
+                if (!confirm(`Group "${primary.name}" already exists.\n\nOverwrite it?`)) {
+                    return;                         // user cancelled
+                }
+                // overwrite the existing entry
+                groups[existingIdx] = {
+                    name: primary.name,
+                    nodes: included.map(n => n.name)
+                };
+                showSuccess(`Group "${primary.name}" overwritten!`);
+            } else {
+                // brand-new group
+                groups.push({
+                    name: primary.name,
+                    nodes: included.map(n => n.name)
+                });
+                showSuccess(`Group "${primary.name}" created!`);
+            }
+        
             renderGroupTable();
         }
 
