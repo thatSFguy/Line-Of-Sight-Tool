@@ -25,6 +25,11 @@
             --primary: #3498db;
         }
 
+        [data-theme="dark"] .notice {
+            background: #d39e00;
+            color: #fff;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 20px;
@@ -165,18 +170,32 @@
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            font-size: 18px;
+            font-size: 20px;
             cursor: pointer;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
             z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .notice {
+            background: var(--warning);
+            color: #212529;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-size: 14px;
         }
     </style>
 </head>
 <body>
 
-    <button class="theme-toggle" onclick="toggleTheme()">Dark Mode</button>
+    <button class="theme-toggle" onclick="toggleTheme()"></button>
 
     <h1>Node Manager</h1>
+
+    <div class="notice">Note: Your nodes and groups are stored in your browser's localStorage. Please download the CSV before clearing your cache or switching browsers to avoid data loss.</div>
 
     <div class="container">
         <div class="form-container">
@@ -262,17 +281,24 @@
 
     <script>
         // === Theme Toggle ===
+        const themeButton = document.querySelector('.theme-toggle');
         function toggleTheme() {
-            const current = document.body.getAttribute('data-theme');
-            document.body.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
-            localStorage.setItem('theme', current === 'dark' ? 'light' : 'dark');
+            const current = document.body.getAttribute('data-theme') || 'light';
+            const newTheme = current === 'dark' ? 'light' : 'dark';
+            document.body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeButton.innerHTML = newTheme === 'dark' ? '☀️' : '🌙';
         }
 
         // Load theme
-        if (localStorage.getItem('theme') === 'dark' || 
-            (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-            document.body.setAttribute('data-theme', 'dark');
+        let savedTheme = localStorage.getItem('theme');
+        if (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            savedTheme = 'dark';
         }
+        if (savedTheme) {
+            document.body.setAttribute('data-theme', savedTheme);
+        }
+        themeButton.innerHTML = (document.body.getAttribute('data-theme') || 'light') === 'dark' ? '☀️' : '🌙';
 
         // === Data ===
         const initialNodes = [
@@ -330,8 +356,8 @@
                     <td>${node.height || ''}</td>
                     <td>${escapeHtml(node.notes || '')}</td>
                     <td>
-                        <span class="edit-btn" onclick="editNode(${realIdx})">Edit</span>
-                        <span class="trash-btn" onclick="deleteNode(${realIdx})">Trash</span>
+                        <span class="edit-btn" onclick="editNode(${realIdx})">✏️</span>
+                        <span class="trash-btn" onclick="deleteNode(${realIdx})">🗑️</span>
                     </td>
                 `;
                 tbody.appendChild(row);
@@ -349,8 +375,8 @@
                     <td>${escapeHtml(group.name)}</td>
                     <td>${group.nodes.map(escapeHtml).join(', ') || 'None'}</td>
                     <td>
-                        <span class="download-btn" onclick="downloadGroupCSV(${index})">Download</span>
-                        <span class="delete-group-btn" onclick="deleteGroup(${index})">Delete</span>
+                        <span class="download-btn" onclick="downloadGroupCSV(${index})">⬇️</span>
+                        <span class="delete-group-btn" onclick="deleteGroup(${index})">🗑️</span>
                     </td>
                 `;
                 tbody.appendChild(row);
@@ -473,13 +499,12 @@
         }
 
         // === Groups ===
-        // === Create group (with overwrite prompt) ===
         function createGroup() {
             clearMessages();
-        
+
             const primary = nodes.find(n => n.primary);
             const included = nodes.filter(n => n.included && !n.primary);
-        
+
             if (!primary) {
                 showError('Select a Primary node.');
                 return;
@@ -488,29 +513,26 @@
                 showError('Select at least one Included node.');
                 return;
             }
-        
+
             const existingIdx = groups.findIndex(g => g.name === primary.name);
-        
+
             if (existingIdx !== -1) {
-                // ----- OVERWRITE PROMPT -----
                 if (!confirm(`Group "${primary.name}" already exists.\n\nOverwrite it?`)) {
-                    return;                         // user cancelled
+                    return;
                 }
-                // overwrite the existing entry
                 groups[existingIdx] = {
                     name: primary.name,
                     nodes: included.map(n => n.name)
                 };
                 showSuccess(`Group "${primary.name}" overwritten!`);
             } else {
-                // brand-new group
                 groups.push({
                     name: primary.name,
                     nodes: included.map(n => n.name)
                 });
                 showSuccess(`Group "${primary.name}" created!`);
             }
-        
+
             renderGroupTable();
         }
 
@@ -599,7 +621,7 @@
                 if (newNodes.length === 0) return showError('No valid rows found.');
 
                 const replace = confirm('Replace existing nodes? (Cancel = Append)');
-                nodes = replace ? newNodes : [...nodes, ...newNewNodes];
+                nodes = replace ? newNodes : [...nodes, ...newNodes];
                 if (replace) groups = [];
                 renderNodeTable(); renderGroupTable();
                 showSuccess(`${newNodes.length} nodes ${replace ? 'replaced' : 'appended'}.`);
