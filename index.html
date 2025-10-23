@@ -14,21 +14,39 @@
         th { background-color: #f2f2f2; }
         .error { color: red; }
         .sample-link { margin: 10px 0; }
+        .form-group { margin: 10px 0; }
+        .form-group label { display: inline-block; width: 150px; }
+        .form-group select, .form-group input[type="radio"] { margin-right: 10px; }
     </style>
 </head>
 <body>
     <h1>RF Line-of-Sight Tool (910 MHz)</h1>
-    <input type="file" id="csvFile" accept=".csv">
-    <br>
-    <a href="https://raw.githubusercontent.com/thatSFguy/Line-Of-Sight-Tool/main/RF_locations_sample.csv" download="RF_locations_sample.csv" class="sample-link">Download Sample CSV</a>
-    <br>
-    <label>Default antenna height (m):</label>
-    <input type="number" id="defaultHeight" value="10">
-    <br>
-    <label>Diffraction loss threshold for 'Clear' LOS (dB):</label>
-    <input type="number" id="losThreshold" value="6">
-    <br>
-    <button onclick="processCSV()">Process</button>
+    <div class="form-group">
+        <label>Data Source:</label>
+        <input type="radio" name="dataSource" id="sourceCSV" value="csv" checked> CSV File
+        <input type="radio" name="dataSource" id="sourceGroup" value="group"> Group from Node Manager
+    </div>
+    <div class="form-group" id="csvInput" style="display: block;">
+        <label>Upload CSV File:</label>
+        <input type="file" id="csvFile" accept=".csv">
+        <br>
+        <a href="https://raw.githubusercontent.com/thatSFguy/Line-Of-Sight-Tool/main/RF_locations_sample.csv" download="RF_locations_sample.csv" class="sample-link">Download Sample CSV</a>
+    </div>
+    <div class="form-group" id="groupInput" style="display: none;">
+        <label>Select Group:</label>
+        <select id="groupSelect">
+            <option value="">Select a group</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label>Default antenna height (m):</label>
+        <input type="number" id="defaultHeight" value="10">
+    </div>
+    <div class="form-group">
+        <label>Diffraction loss threshold for 'Clear' LOS (dB):</label>
+        <input type="number" id="losThreshold" value="6">
+    </div>
+    <button onclick="processData()">Process</button>
     <div id="results"></div>
     <div id="map"></div>
     <script>
@@ -44,6 +62,30 @@
         const BASE_TILE_URL = 'https://raw.githubusercontent.com/thatSFguy/Line-Of-Sight-Tool/main/tiles/'; // Your repo
 
         let map = null; // Global map variable
+
+        // Populate group dropdown
+        function populateGroupDropdown() {
+            const groupSelect = document.getElementById('groupSelect');
+            groupSelect.innerHTML = '<option value="">Select a group</option>';
+            const groups = JSON.parse(localStorage.getItem('groups')) || [];
+            groups.forEach(group => {
+                const option = document.createElement('option');
+                option.value = group.name;
+                option.textContent = group.name;
+                groupSelect.appendChild(option);
+            });
+        }
+
+        // Toggle input visibility based on data source
+        document.getElementById('sourceCSV').addEventListener('change', () => {
+            document.getElementById('csvInput').style.display = 'block';
+            document.getElementById('groupInput').style.display = 'none';
+        });
+        document.getElementById('sourceGroup').addEventListener('change', () => {
+            document.getElementById('csvInput').style.display = 'none';
+            document.getElementById('groupInput').style.display = 'block';
+            populateGroupDropdown();
+        });
 
         // Validate CSV data
         function validateCSV(lines) {
@@ -70,8 +112,29 @@
                 'Latitude': parseFloat(row[1]),
                 'Longitude': parseFloat(row[2]),
                 'Height': row[3] ? parseFloat(row[3]) : null,
-                'Notes': row[4] || '' // Include Notes, default to empty string if missing
+                'Notes': row[4] || ''
             })) };
+        }
+
+        // Convert group to CSV-like data
+        function groupToCSV(groupName) {
+            const nodes = JSON.parse(localStorage.getItem('nodes')) || [];
+            const groups = JSON.parse(localStorage.getItem('groups')) || [];
+            const group = groups.find(g => g.name === groupName);
+            if (!group) return null;
+            const primaryNode = nodes.find(node => node.name === group.name);
+            const includedNodes = nodes.filter(node => group.nodes.includes(node.name));
+            const groupNodes = primaryNode ? [primaryNode, ...includedNodes] : includedNodes;
+            if (groupNodes.length < 2) return null;
+            const headers = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
+            const rows = groupNodes.map(node => [
+                `"${node.name.replace(/"/g, '""')}"`,
+                node.latitude,
+                node.longitude,
+                node.height || '',
+                `"${(node.notes || '').replace(/"/g, '""')}"`
+            ]);
+            return [headers, ...rows];
         }
 
         // Function to get tile name for lat, lon
@@ -252,95 +315,113 @@
             return { siteB: nameB, status: isLos, diffLoss: diffractionLoss.toFixed(2), fsLoss: fsLoss.toFixed(2), totalLoss: totalLoss.toFixed(2), latB, lonB, notesB };
         }
 
-        // Process CSV
-        async function processCSV() {
-            const file = document.getElementById('csvFile').files[0];
-            if (!file) {
-                document.getElementById('results').innerHTML = '<p class="error">Please select a CSV file.</p>';
-                return;
-            }
-            const reader = new FileReader();
-            reader.onload = async function(e) {
-                const text = e.target.result;
-                const lines = text.split('\n').map(l => l.trim().split(','));
-                const validation = validateCSV(lines);
-                if (typeof validation === 'string') {
-                    document.getElementById('results').innerHTML = `<p class="error">Error: ${validation}</p>`;
+        // Process data (CSV or group)
+        async function processData() {
+            const source = document.querySelector('input[name="dataSource"]:checked').value;
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p>Loading...</p>';
+
+            let lines;
+            if (source === 'csv') {
+                const file = document.getElementById('csvFile').files[0];
+                if (!file) {
+                    resultsDiv.innerHTML = '<p class="error">Please select a CSV file.</p>';
                     return;
                 }
-
-                const data = validation.validRows;
-                const defaultHeight = parseFloat(document.getElementById('defaultHeight').value);
-                const losThreshold = parseFloat(document.getElementById('losThreshold').value);
-
-                const locA = data[0];
-                const nameA = locA['Location Name'];
-                const latA = locA['Latitude'];
-                const lonA = locA['Longitude'];
-                const hA = locA['Height'] || defaultHeight;
-                const notesA = locA['Notes'];
-
-                // Clear previous results and map
-                document.getElementById('results').innerHTML = '';
-                if (map) {
-                    map.remove(); // Remove old map
+                const text = await file.text();
+                lines = text.split('\n').map(l => l.trim().split(','));
+            } else {
+                const groupName = document.getElementById('groupSelect').value;
+                if (!groupName) {
+                    resultsDiv.innerHTML = '<p class="error">Please select a group.</p>';
+                    return;
                 }
-                const mapDiv = document.getElementById('map');
-                mapDiv.innerHTML = ''; // Clear map div
-                map = L.map('map').setView([latA, lonA], 7); // Initialize new map
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                lines = groupToCSV(groupName);
+                if (!lines || lines.length < 2) {
+                    resultsDiv.innerHTML = '<p class="error">Selected group is invalid or has fewer than two nodes.</p>';
+                    return;
+                }
+            }
+
+            const validation = validateCSV(lines);
+            if (typeof validation === 'string') {
+                resultsDiv.innerHTML = `<p class="error">Error: ${validation}</p>`;
+                return;
+            }
+
+            const data = validation.validRows;
+            const defaultHeight = parseFloat(document.getElementById('defaultHeight').value);
+            const losThreshold = parseFloat(document.getElementById('losThreshold').value);
+
+            const locA = data[0];
+            const nameA = locA['Location Name'];
+            const latA = locA['Latitude'];
+            const lonA = locA['Longitude'];
+            const hA = locA['Height'] || defaultHeight;
+            const notesA = locA['Notes'];
+
+            // Clear previous results and map
+            resultsDiv.innerHTML = '';
+            if (map) {
+                map.remove(); // Remove old map
+            }
+            const mapDiv = document.getElementById('map');
+            mapDiv.innerHTML = ''; // Clear map div
+            map = L.map('map').setView([latA, lonA], 7); // Initialize new map
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+
+            // Process pairs
+            const table = document.createElement('table');
+            table.innerHTML = `<tr><th>Site B</th><th>LOS Status</th><th>Diffraction Loss (dB)</th><th>Free-Space Loss (dB)</th><th>Total Loss (dB)</th><th>Notes</th></tr>`;
+            const results = [];
+            for (let i = 1; i < data.length; i++) {
+                const locB = data[i];
+                const nameB = locB['Location Name'];
+                const latB = locB['Latitude'];
+                const lonB = locB['Longitude'];
+                const hB = locB['Height'] || defaultHeight;
+                const notesB = locB['Notes'];
+
+                const result = await processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, notesB, losThreshold);
+                results.push(result);
+            }
+
+            // Add Site A marker (blue)
+            L.marker([latA, lonA], {
+                icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png', iconSize: [25, 41], iconAnchor: [12, 41] })
+            }).addTo(map).bindPopup(`${nameA}${notesA ? '<br>Notes: ' + notesA : ''}`);
+
+            // Add Site B markers (green) and lines to Site A (blue for Clear, red for Obstructed)
+            results.forEach(r => {
+                L.marker([r.latB, r.lonB], {
+                    icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41] })
+                }).addTo(map).bindPopup(`${r.siteB}${r.notesB ? '<br>Notes: ' + r.notesB : ''}`);
+                L.polyline([[latA, lonA], [r.latB, r.lonB]], { 
+                    color: r.status === 'Clear' ? 'blue' : 'red', 
+                    weight: 2 
                 }).addTo(map);
+            });
 
-                // Process pairs
-                const table = document.createElement('table');
-                table.innerHTML = `<tr><th>Site B</th><th>LOS Status</th><th>Diffraction Loss (dB)</th><th>Free-Space Loss (dB)</th><th>Total Loss (dB)</th><th>Notes</th></tr>`;
-                const results = [];
-                for (let i = 1; i < data.length; i++) {
-                    const locB = data[i];
-                    const nameB = locB['Location Name'];
-                    const latB = locB['Latitude'];
-                    const lonB = locB['Longitude'];
-                    const hB = locB['Height'] || defaultHeight;
-                    const notesB = locB['Notes'];
+            // Adjust map bounds
+            const bounds = [[latA, lonA], ...results.map(r => [r.latB, r.lonB])];
+            map.fitBounds(bounds, { padding: [50, 50] });
 
-                    const result = await processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, notesB, losThreshold);
-                    results.push(result);
-                }
-
-                // Add Site A marker (blue)
-                L.marker([latA, lonA], {
-                    icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png', iconSize: [25, 41], iconAnchor: [12, 41] })
-                }).addTo(map).bindPopup(`${nameA}${notesA ? '<br>Notes: ' + notesA : ''}`);
-
-                // Add Site B markers (green) and lines to Site A (blue for Clear, red for Obstructed)
-                results.forEach(r => {
-                    L.marker([r.latB, r.lonB], {
-                        icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41] })
-                    }).addTo(map).bindPopup(`${r.siteB}${r.notesB ? '<br>Notes: ' + r.notesB : ''}`);
-                    L.polyline([[latA, lonA], [r.latB, r.lonB]], { 
-                        color: r.status === 'Clear' ? 'blue' : 'red', 
-                        weight: 2 
-                    }).addTo(map);
-                });
-
-                // Adjust map bounds
-                const bounds = [[latA, lonA], ...results.map(r => [r.latB, r.lonB])];
-                map.fitBounds(bounds, { padding: [50, 50] });
-
-                // Display results table
-                results.forEach(r => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `<td>${r.siteB}</td><td>${r.status}</td><td>${r.diffLoss}</td><td>${r.fsLoss}</td><td>${r.totalLoss}</td><td>${r.notesB}</td>`;
-                    table.appendChild(tr);
-                });
-                const div = document.createElement('div');
-                div.innerHTML = `<h2>LOS Results (from Site A: ${nameA})</h2>`;
-                div.appendChild(table);
-                document.getElementById('results').appendChild(div);
-            };
-            reader.readAsText(file);
+            // Display results table
+            results.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${r.siteB}</td><td>${r.status}</td><td>${r.diffLoss}</td><td>${r.fsLoss}</td><td>${r.totalLoss}</td><td>${r.notesB}</td>`;
+                table.appendChild(tr);
+            });
+            const div = document.createElement('div');
+            div.innerHTML = `<h2>LOS Results (from Site A: ${nameA})</h2>`;
+            div.appendChild(table);
+            document.getElementById('results').appendChild(div);
         }
+
+        // Initial setup
+        populateGroupDropdown();
     </script>
 </body>
 </html>
