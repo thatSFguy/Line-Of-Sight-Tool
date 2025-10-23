@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Node Manager</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .error { color: red; margin: 10px 0; }
+        .form-group { margin: 10px 0; }
+        .form-group label { display: inline-block; width: 120px; }
+        .form-group input, .form-group textarea { width: 200px; }
+        button { margin: 5px; padding: 8px 16px; }
+        .controls { margin-top: 10px; }
+        .container { display: flex; flex-wrap: wrap; }
+        .form-container { flex: 1; min-width: 300px; margin-right: 20px; }
+        #map { flex: 1; height: 400px; min-width: 300px; }
+        .map-instructions { font-size: 14px; color: #555; margin-bottom: 10px; }
+        .trash-btn { cursor: pointer; color: red; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h1>Node Manager</h1>
+    <div class="container">
+        <div class="form-container">
+            <div class="form-group">
+                <label>Location Name:</label>
+                <input type="text" id="name" placeholder="e.g., Site A">
+            </div>
+            <div class="form-group">
+                <label>Latitude:</label>
+                <input type="number" step="any" id="latitude" placeholder="e.g., 39.9612">
+            </div>
+            <div class="form-group">
+                <label>Longitude:</label>
+                <input type="number" step="any" id="longitude" placeholder="e.g., -82.9988">
+            </div>
+            <div class="form-group">
+                <label>Height (m):</label>
+                <input type="number" step="any" id="height" placeholder="e.g., 10">
+            </div>
+            <div class="form-group">
+                <label>Notes:</label>
+                <textarea id="notes" placeholder="e.g., blah"></textarea>
+            </div>
+            <button onclick="addNode()">Add Node</button>
+            <div class="controls">
+                <button onclick="triggerCSVUpload()">Upload CSV</button>
+                <button onclick="downloadCSV()">Download CSV</button>
+            </div>
+            <div id="error" class="error"></div>
+        </div>
+        <div>
+            <div class="map-instructions">Click on the map to auto-fill Latitude and Longitude.</div>
+            <div id="map"></div>
+        </div>
+    </div>
+    <table id="nodeTable">
+        <thead>
+            <tr>
+                <th>Include</th>
+                <th>Primary</th>
+                <th>Location Name</th>
+                <th>Latitude</th>
+                <th>Longitude</th>
+                <th>Height (m)</th>
+                <th>Notes</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="nodeTableBody"></tbody>
+    </table>
+    <script>
+        // Initialize nodes from localStorage or sample data
+        const initialNodes = [
+            { name: 'Site A', latitude: 39.9612, longitude: -82.9988, height: 10, notes: 'blah', included: false, primary: false },
+            { name: 'Site B', latitude: 45.4215, longitude: -75.6972, height: 15, notes: 'bleh', included: false, primary: false },
+            { name: 'Site C', latitude: 19.4326, longitude: -99.1332, height: 12, notes: 'nothing', included: false, primary: false }
+        ];
+        let nodes = JSON.parse(localStorage.getItem('nodes')) || initialNodes;
+
+        // Initialize Leaflet map
+        let map = L.map('map').setView([0, 0], 2); // Default view
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+
+        // Center map on user's geolocation
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const { latitude, longitude } = position.coords;
+                    map.setView([latitude, longitude], 10); // Zoom level 10 for local view
+                },
+                error => {
+                    console.error('Geolocation error:', error);
+                    // Fallback to sample data centroid if geolocation fails
+                    const validNodes = nodes.filter(n => !isNaN(n.latitude) && !isNaN(n.longitude));
+                    if (validNodes.length > 0) {
+                        const avgLat = validNodes.reduce((sum, n) => sum + n.latitude, 0) / validNodes.length;
+                        const avgLon = validNodes.reduce((sum, n) => sum + n.longitude, 0) / validNodes.length;
+                        map.setView([avgLat, avgLon], 5);
+                    }
+                }
+            );
+        } else {
+            // Fallback if geolocation is not supported
+            const validNodes = nodes.filter(n => !isNaN(n.latitude) && !isNaN(n.longitude));
+            if (validNodes.length > 0) {
+                const avgLat = validNodes.reduce((sum, n) => sum + n.latitude, 0) / validNodes.length;
+                const avgLon = validNodes.reduce((sum, n) => sum + n.longitude, 0) / validNodes.length;
+                map.setView([avgLat, avgLon], 5);
+            }
+        }
+
+        // Auto-populate lat/lon on map click
+        map.on('click', function(e) {
+            document.getElementById('latitude').value = e.latlng.lat.toFixed(6);
+            document.getElementById('longitude').value = e.latlng.lng.toFixed(6);
+        });
+
+        // Render table
+        function renderTable() {
+            const tbody = document.getElementById('nodeTableBody');
+            tbody.innerHTML = '';
+            nodes.forEach((node, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><input type="checkbox" ${node.included ? 'checked' : ''} onchange="updateIncluded(${index}, this.checked)"></td>
+                    <td><input type="radio" name="primary" ${node.primary ? 'checked' : ''} onchange="setPrimary(${index})"></td>
+                    <td>${node.name}</td>
+                    <td>${node.latitude}</td>
+                    <td>${node.longitude}</td>
+                    <td>${node.height || ''}</td>
+                    <td>${node.notes || ''}</td>
+                    <td><span class="trash-btn" onclick="deleteNode(${index})">🗑️</span></td>
+                `;
+                tbody.appendChild(row);
+            });
+            localStorage.setItem('nodes', JSON.stringify(nodes));
+        }
+
+        // Add new node
+        function addNode() {
+            const name = document.getElementById('name').value.trim();
+            const latitude = parseFloat(document.getElementById('latitude').value);
+            const longitude = parseFloat(document.getElementById('longitude').value);
+            const height = parseFloat(document.getElementById('height').value);
+            const notes = document.getElementById('notes').value.trim();
+
+            if (!name || isNaN(latitude) || isNaN(longitude)) {
+                document.getElementById('error').textContent = 'Location Name, Latitude, and Longitude are required and must be valid.';
+                return;
+            }
+
+            nodes.push({
+                name,
+                latitude,
+                longitude,
+                height: isNaN(height) ? null : height,
+                notes: notes || '',
+                included: false,
+                primary: false
+            });
+
+            document.getElementById('name').value = '';
+            document.getElementById('latitude').value = '';
+            document.getElementById('longitude').value = '';
+            document.getElementById('height').value = '';
+            document.getElementById('notes').value = '';
+            document.getElementById('error').textContent = '';
+
+            renderTable();
+        }
+
+        // Update included status
+        function updateIncluded(index, checked) {
+            nodes[index].included = checked;
+            if (nodes[index].primary) nodes[index].included = true; // Primary is always included
+            renderTable();
+        }
+
+        // Set primary node
+        function setPrimary(index) {
+            nodes.forEach((node, i) => {
+                node.primary = (i === index);
+                if (i === index) node.included = true; // Primary is always included
+            });
+            renderTable();
+        }
+
+        // Delete node with confirmation
+        function deleteNode(index) {
+            if (nodes[index].primary) {
+                document.getElementById('error').textContent = 'Cannot delete the primary node.';
+                return;
+            }
+            if (confirm(`Are you sure you want to delete "${nodes[index].name}"?`)) {
+                nodes.splice(index, 1);
+                document.getElementById('error').textContent = '';
+                renderTable();
+            }
+        }
+
+        // Download nodes as CSV
+        function downloadCSV() {
+            const headers = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
+            const rows = nodes.map(node => [
+                `"${node.name.replace(/"/g, '""')}"`,
+                node.latitude,
+                node.longitude,
+                node.height || '',
+                `"${(node.notes || '').replace(/"/g, '""')}"`
+            ].join(','));
+            const csv = [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'nodes.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Trigger CSV upload popup
+        function triggerCSVUpload() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv';
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) {
+                    document.getElementById('error').textContent = 'No file selected.';
+                    return;
+                }
+                uploadCSV(file);
+            };
+            input.click();
+        }
+
+        // Upload CSV
+        function uploadCSV(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lines = text.split('\n').map(l => l.trim().split(','));
+                if (lines.length < 1) {
+                    document.getElementById('error').textContent = 'CSV is empty.';
+                    return;
+                }
+                const headers = lines[0].map(h => h.trim());
+                const expected = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
+                if (!headers.every((h, i) => h === expected[i] || (i === 4 && h === 'Notes'))) {
+                    document.getElementById('error').textContent = 'CSV headers must be: Location Name,Latitude,Longitude,Height,Notes (Notes optional)';
+                    return;
+                }
+                const newNodes = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const row = lines[i].map(v => v.trim());
+                    if (row.length < 3 || !row[0] || isNaN(parseFloat(row[1])) || isNaN(parseFloat(row[2]))) {
+                        continue; // Skip invalid/blank rows
+                    }
+                    const height = row[3] ? parseFloat(row[3]) : null;
+                    if (row[3] && isNaN(height)) {
+                        document.getElementById('error').textContent = `Invalid Height in row ${i + 1}: ${row[3]}`;
+                        return;
+                    }
+                    newNodes.push({
+                        name: row[0],
+                        latitude: parseFloat(row[1]),
+                        longitude: parseFloat(row[2]),
+                        height: height,
+                        notes: row[4] || '',
+                        included: false,
+                        primary: false
+                    });
+                }
+                if (newNodes.length === 0) {
+                    document.getElementById('error').textContent = 'No valid data rows in CSV.';
+                    return;
+                }
+                nodes = newNodes;
+                document.getElementById('error').textContent = '';
+                renderTable();
+            };
+            reader.readAsText(file);
+        }
+
+        // Initial render
+        renderTable();
+    </script>
+</body>
+</html>
