@@ -16,11 +16,14 @@
         .form-group input, .form-group textarea { width: 200px; }
         button { margin: 5px; padding: 8px 16px; }
         .controls { margin-top: 10px; }
-        .container { display: flex; flex-wrap: wrap; }
-        .form-container { flex: 1; min-width: 300px; margin-right: 20px; }
-        #map { flex: 1; height: 400px; min-width: 300px; }
+        .container { display: flex; flex-wrap: wrap; gap: 20px; }
+        .form-container { flex: 0 0 40%; min-width: 300px; }
+        .map-container { flex: 0 0 60%; min-width: 300px; }
+        #map { height: 500px; width: 100%; }
         .map-instructions { font-size: 14px; color: #555; margin-bottom: 10px; }
-        .trash-btn { cursor: pointer; color: red; font-size: 16px; }
+        .trash-btn, .edit-btn { cursor: pointer; font-size: 16px; }
+        .trash-btn { color: red; }
+        .edit-btn { color: blue; margin-right: 10px; }
     </style>
 </head>
 <body>
@@ -47,14 +50,17 @@
                 <label>Notes:</label>
                 <textarea id="notes" placeholder="e.g., blah"></textarea>
             </div>
-            <button onclick="addNode()">Add Node</button>
+            <div id="form-buttons">
+                <button id="addNodeBtn" onclick="addNode()">Add Node</button>
+                <button id="cancelBtn" style="display: none;" onclick="cancelEdit()">Cancel</button>
+            </div>
             <div class="controls">
                 <button onclick="triggerCSVUpload()">Upload CSV</button>
                 <button onclick="downloadCSV()">Download CSV</button>
             </div>
             <div id="error" class="error"></div>
         </div>
-        <div>
+        <div class="map-container">
             <div class="map-instructions">Click on the map to auto-fill Latitude and Longitude.</div>
             <div id="map"></div>
         </div>
@@ -69,7 +75,7 @@
                 <th>Longitude</th>
                 <th>Height (m)</th>
                 <th>Notes</th>
-                <th>Action</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody id="nodeTableBody"></tbody>
@@ -82,6 +88,7 @@
             { name: 'Site C', latitude: 19.4326, longitude: -99.1332, height: 12, notes: 'nothing', included: false, primary: false }
         ];
         let nodes = JSON.parse(localStorage.getItem('nodes')) || initialNodes;
+        let editIndex = null; // Track node being edited
 
         // Initialize Leaflet map
         let map = L.map('map').setView([0, 0], 2); // Default view
@@ -137,14 +144,17 @@
                     <td>${node.longitude}</td>
                     <td>${node.height || ''}</td>
                     <td>${node.notes || ''}</td>
-                    <td><span class="trash-btn" onclick="deleteNode(${index})">🗑️</span></td>
+                    <td>
+                        <span class="edit-btn" onclick="editNode(${index})">✏️</span>
+                        <span class="trash-btn" onclick="deleteNode(${index})">🗑️</span>
+                    </td>
                 `;
                 tbody.appendChild(row);
             });
             localStorage.setItem('nodes', JSON.stringify(nodes));
         }
 
-        // Add new node
+        // Add or update node
         function addNode() {
             const name = document.getElementById('name').value.trim();
             const latitude = parseFloat(document.getElementById('latitude').value);
@@ -157,15 +167,32 @@
                 return;
             }
 
-            nodes.push({
-                name,
-                latitude,
-                longitude,
-                height: isNaN(height) ? null : height,
-                notes: notes || '',
-                included: false,
-                primary: false
-            });
+            if (editIndex !== null) {
+                // Update existing node
+                nodes[editIndex] = {
+                    name,
+                    latitude,
+                    longitude,
+                    height: isNaN(height) ? null : height,
+                    notes: notes || '',
+                    included: nodes[editIndex].included,
+                    primary: nodes[editIndex].primary
+                };
+                editIndex = null;
+                document.getElementById('addNodeBtn').textContent = 'Add Node';
+                document.getElementById('cancelBtn').style.display = 'none';
+            } else {
+                // Add new node
+                nodes.push({
+                    name,
+                    latitude,
+                    longitude,
+                    height: isNaN(height) ? null : height,
+                    notes: notes || '',
+                    included: false,
+                    primary: false
+                });
+            }
 
             document.getElementById('name').value = '';
             document.getElementById('latitude').value = '';
@@ -175,6 +202,32 @@
             document.getElementById('error').textContent = '';
 
             renderTable();
+        }
+
+        // Edit node
+        function editNode(index) {
+            const node = nodes[index];
+            document.getElementById('name').value = node.name;
+            document.getElementById('latitude').value = node.latitude;
+            document.getElementById('longitude').value = node.longitude;
+            document.getElementById('height').value = node.height || '';
+            document.getElementById('notes').value = node.notes || '';
+            document.getElementById('addNodeBtn').textContent = 'Save';
+            document.getElementById('cancelBtn').style.display = 'inline';
+            editIndex = index;
+        }
+
+        // Cancel edit
+        function cancelEdit() {
+            document.getElementById('name').value = '';
+            document.getElementById('latitude').value = '';
+            document.getElementById('longitude').value = '';
+            document.getElementById('height').value = '';
+            document.getElementById('notes').value = '';
+            document.getElementById('addNodeBtn').textContent = 'Add Node';
+            document.getElementById('cancelBtn').style.display = 'none';
+            document.getElementById('error').textContent = '';
+            editIndex = null;
         }
 
         // Update included status
@@ -242,7 +295,7 @@
             input.click();
         }
 
-        // Upload CSV
+        // Upload CSV with replace/append prompt
         function uploadCSV(file) {
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -283,7 +336,12 @@
                     document.getElementById('error').textContent = 'No valid data rows in CSV.';
                     return;
                 }
-                nodes = newNodes;
+                const replace = confirm('Replace existing nodes with uploaded data? Click OK to replace, Cancel to append.');
+                if (replace) {
+                    nodes = newNodes;
+                } else {
+                    nodes = [...nodes, ...newNodes];
+                }
                 document.getElementById('error').textContent = '';
                 renderTable();
             };
