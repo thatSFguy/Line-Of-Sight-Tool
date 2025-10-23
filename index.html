@@ -228,7 +228,7 @@
             const newTheme = current === 'dark' ? 'light' : 'dark';
             document.body.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
-            themeButton.innerHTML = newTheme === 'dark' ? 'Sun' : 'Moon';
+            themeButton.innerHTML = newTheme === 'dark' ? '☀️' : '🌙';
         }
 
         // Load theme
