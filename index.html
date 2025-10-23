@@ -14,7 +14,6 @@
         th { background-color: #f2f2f2; }
         .error { color: red; }
         .sample-link { margin: 10px 0; }
-        canvas { width: 100%; height: 300px; }
     </style>
 </head>
 <body>
@@ -50,9 +49,9 @@
         function validateCSV(lines) {
             if (lines.length < 2) return "CSV must have at least two rows (Site A + one Site B)";
             const headers = lines[0].map(h => h.trim());
-            const expected = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
-            if (!headers.every((h, i) => h === expected[i])) {
-                return "CSV headers must be: Location Name,Latitude,Longitude,Height,Notes";
+            const expected = ['Location Name', 'Latitude', 'Longitude', 'Height'];
+            if (!headers.every((h, i) => h === expected[i] || (i === 3 && h === 'Height'))) {
+                return "CSV headers must be: Location Name,Latitude,Longitude,Height (Height optional)";
             }
             const validRows = [];
             for (let i = 1; i < lines.length; i++) {
@@ -70,8 +69,7 @@
                 'Location Name': row[0],
                 'Latitude': parseFloat(row[1]),
                 'Longitude': parseFloat(row[2]),
-                'Height': row[3] ? parseFloat(row[3]) : null,
-                'Notes': row[4] || '' // Include Notes, default to empty string if missing
+                'Height': row[3] ? parseFloat(row[3]) : null
             })) };
         }
 
@@ -89,7 +87,7 @@
             if (TILE_CACHE.has(tileName)) return TILE_CACHE.get(tileName);
             try {
                 const response = await fetch(BASE_TILE_URL + tileName);
-                if (!response.ok) throw new Error(`Tile ${tileName} not found`);
+                if (!response.ok) throw new Error('Tile not found');
                 const buffer = await response.arrayBuffer();
                 const zip = await JSZip.loadAsync(buffer);
                 const hgtFile = Object.values(zip.files)[0]; // Assume one .hgt file per zip
@@ -97,7 +95,6 @@
                 TILE_CACHE.set(tileName, hgtBuffer);
                 return hgtBuffer;
             } catch (e) {
-                document.getElementById('results').innerHTML += `<p class="error">Error loading tile ${tileName}: ${e.message}</p>`;
                 console.error('Error loading tile:', e);
                 return null;
             }
@@ -148,14 +145,18 @@
         // Get height profile
         async function getHeightProfile(latA, lonA, latB, lonB, step) {
             const totalDist = haversineDistance(latA, lonA, latB, lonB);
-            const numSteps = Math.max(10, Math.ceil(totalDist / step) + 1); // Minimum 10 steps
-            const points = [];
+            const numSteps = Math.ceil(totalDist / step) + 1;
+            const distances = [];
+            const heights = [];
+            let currentDist = 0;
             for (let i = 0; i < numSteps; i++) {
                 const fraction = i / (numSteps - 1);
-                points.push(getIntermediatePoint(latA, lonA, latB, lonB, fraction));
+                const point = getIntermediatePoint(latA, lonA, latB, lonB, fraction);
+                const height = await getElevation(point.lat, point.lon);
+                heights.push(height);
+                distances.push((currentDist / 1000 * KM_TO_MILES).toFixed(1)); // Convert to miles, 1 decimal
+                currentDist += totalDist / (numSteps - 1);
             }
-            const heights = await Promise.all(points.map(p => getElevation(p.lat, p.lon)));
-            const distances = points.map((_, i) => (i * totalDist / (numSteps - 1) / 1000 * KM_TO_MILES).toFixed(1));
             return {distances, heights, totalDist: totalDist / 1000 * KM_TO_MILES}; // miles
         }
 
@@ -172,7 +173,7 @@
         }
 
         // Process pair
-        async function processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, notesB, losThreshold) {
+        async function processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, losThreshold) {
             const profile = await getHeightProfile(latA, lonA, latB, lonB, HPROF_STEP);
             const distances = profile.distances; // miles, rounded
             const heights = profile.heights; // m
@@ -216,43 +217,30 @@
             const totalLoss = fsLoss + diffractionLoss;
             const isLos = diffractionLoss < losThreshold ? 'Clear' : 'Obstructed';
 
-            // Plot
-            const canvasId = 'chart_' + nameB.replace(/[^a-zA-Z0-9]/g, '_');
-            console.log('Creating canvas with ID:', canvasId); // Debug
+            // Plot (only if valid pair)
+            const canvasId = 'chart_' + nameB.replace(/\s/g, '_');
             const div = document.createElement('div');
-            div.innerHTML = `<h3 path Profile: ${nameA} to ${nameB}</h3><canvas id="${canvasId}"></canvas>`;
+            div.innerHTML = `<h3>Path Profile: ${nameA} to ${nameB}</h3><canvas id="${canvasId}"></canvas>`;
             document.getElementById('results').appendChild(div);
-
-            // Ensure canvas exists before accessing
-            const canvas = document.getElementById(canvasId);
-            if (!canvas) {
-                document.getElementById('results').innerHTML += `<p class="error">Error: Canvas element ${canvasId} not found.</p>`;
-                console.error('Canvas element not found:', canvasId);
-                return { siteB: nameB, status: isLos, diffLoss: diffractionLoss.toFixed(2), fsLoss: fsLoss.toFixed(2), totalLoss: totalLoss.toFixed(2), latB, lonB, notesB };
-            }
-
-            const ctx = canvas.getContext('2d');
+            const ctx = document.getElementById(canvasId).getContext('2d');
             new Chart(ctx, {
-                path: 'line',
+                type: 'line',
                 data: {
                     labels: distances,
                     datasets: [{
                         label: 'Terrain Profile (Curvature Adjusted)',
                         data: heights.map((h, i) => h - curvature_adjust[i]),
-                        borderColor: '#2ecc71',
-                        backgroundColor: 'rgba(46, 204, 113, 0.1)',
-                        fill: true
+                        borderColor: 'black',
+                        fill: false
                     }, {
                         label: 'LOS Line',
                         data: los_line.map((l, i) => l - curvature_adjust[i]),
-                        borderColor: '#e74c3c',
+                        borderColor: 'red',
                         borderDash: [5, 5],
                         fill: false
                     }]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
                     scales: {
                         x: { title: { display: true, text: 'Distance [miles]' } },
                         y: { title: { display: true, text: 'Height [m]' } }
@@ -260,25 +248,14 @@
                 }
             });
 
-            return { siteB: nameB, status: isLos, diffLoss: diffractionLoss.toFixed(2), fsLoss: fsLoss.toFixed(2), totalLoss: totalLoss.toFixed(2), latB, lonB, notesB };
+            return { siteB: nameB, status: isLos, diffLoss: diffractionLoss.toFixed(2), fsLoss: fsLoss.toFixed(2), totalLoss: totalLoss.toFixed(2), latB, lonB };
         }
 
         // Process CSV
         async function processCSV() {
-            document.getElementById('results').innerHTML = '<p>Loading...</p>';
             const file = document.getElementById('csvFile').files[0];
-            const defaultHeight = parseFloat(document.getElementById('defaultHeight').value);
-            const losThreshold = parseFloat(document.getElementById('losThreshold').value);
             if (!file) {
                 document.getElementById('results').innerHTML = '<p class="error">Please select a CSV file.</p>';
-                return;
-            }
-            if (isNaN(defaultHeight) || defaultHeight < 0) {
-                document.getElementById('results').innerHTML = '<p class="error">Default antenna height must be a non-negative number.</p>';
-                return;
-            }
-            if (isNaN(losThreshold)) {
-                document.getElementById('results').innerHTML = '<p class="error">LOS threshold must be a valid number.</p>';
                 return;
             }
             const reader = new FileReader();
@@ -292,36 +269,30 @@
                 }
 
                 const data = validation.validRows;
+                const defaultHeight = parseFloat(document.getElementById('defaultHeight').value);
+                const losThreshold = parseFloat(document.getElementById('losThreshold').value);
+
                 const locA = data[0];
                 const nameA = locA['Location Name'];
                 const latA = locA['Latitude'];
                 const lonA = locA['Longitude'];
                 const hA = locA['Height'] || defaultHeight;
-                const notesA = locA['Notes'];
 
                 // Clear previous results and map
                 document.getElementById('results').innerHTML = '';
                 if (map) {
-                    map.eachLayer(layer => {
-                        if (layer instanceof L.Marker || layer instanceof L.Polyline) {
-                            map.removeLayer(layer);
-                        }
-                    });
-                    map.setView([latA, lonA], 7);
-                } else {
-                    map = L.map('map').setView([latA, lonA], 7);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    }).addTo(map);
+                    map.remove(); // Remove old map
                 }
-
-                // Preload tiles
-                const tiles = new Set(data.map(loc => getTileName(loc.Latitude, loc.Longitude)));
-                await Promise.all([...tiles].map(tile => loadTile(tile)));
+                const mapDiv = document.getElementById('map');
+                mapDiv.innerHTML = ''; // Clear map div
+                map = L.map('map').setView([latA, lonA], 7); // Initialize new map
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                }).addTo(map);
 
                 // Process pairs
                 const table = document.createElement('table');
-                table.innerHTML = `<tr><th>Site B</th><th>LOS Status</th><th>Diffraction Loss (dB)</th><th>Free-Space Loss (dB)</th><th>Total Loss (dB)</th><th>Notes</th></tr>`;
+                table.innerHTML = `<tr><th>Site B</th><th>LOS Status</th><th>Diffraction Loss (dB)</th><th>Free-Space Loss (dB)</th><th>Total Loss (dB)</th></tr>`;
                 const results = [];
                 for (let i = 1; i < data.length; i++) {
                     const locB = data[i];
@@ -329,22 +300,21 @@
                     const latB = locB['Latitude'];
                     const lonB = locB['Longitude'];
                     const hB = locB['Height'] || defaultHeight;
-                    const notesB = locB['Notes'];
 
-                    const result = await processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, notesB, losThreshold);
+                    const result = await processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, losThreshold);
                     results.push(result);
                 }
 
                 // Add Site A marker (blue)
                 L.marker([latA, lonA], {
                     icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png', iconSize: [25, 41], iconAnchor: [12, 41] })
-                }).addTo(map).bindPopup(`${nameA}${notesA ? '<br>Notes: ' + notesA : ''}`);
+                }).addTo(map).bindPopup(nameA);
 
                 // Add Site B markers (green) and lines to Site A (blue for Clear, red for Obstructed)
                 results.forEach(r => {
                     L.marker([r.latB, r.lonB], {
                         icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41] })
-                    }).addTo(map).bindPopup(`${r.siteB}${r.notesB ? '<br>Notes: ' + r.notesB : ''}`);
+                    }).addTo(map).bindPopup(r.siteB);
                     L.polyline([[latA, lonA], [r.latB, r.lonB]], { 
                         color: r.status === 'Clear' ? 'blue' : 'red', 
                         weight: 2 
@@ -358,7 +328,7 @@
                 // Display results table
                 results.forEach(r => {
                     const tr = document.createElement('tr');
-                    tr.innerHTML = `<td>${r.siteB}</td><td>${r.status}</td><td>${r.diffLoss}</td><td>${r.fsLoss}</td><td>${r.totalLoss}</td><td>${r.notesB}</td>`;
+                    tr.innerHTML = `<td>${r.siteB}</td><td>${r.status}</td><td>${r.diffLoss}</td><td>${r.fsLoss}</td><td>${r.totalLoss}</td>`;
                     table.appendChild(tr);
                 });
                 const div = document.createElement('div');
