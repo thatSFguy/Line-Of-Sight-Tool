@@ -21,9 +21,10 @@
         .map-container { flex: 0 0 55%; min-width: 300px; }
         #map { height: 350px; width: 100%; }
         .map-instructions { font-size: 14px; color: #555; margin-bottom: 10px; }
-        .trash-btn, .edit-btn { cursor: pointer; font-size: 16px; }
+        .trash-btn, .edit-btn, .download-btn { cursor: pointer; font-size: 16px; }
         .trash-btn { color: red; }
         .edit-btn { color: blue; margin-right: 10px; }
+        .download-btn { color: green; }
     </style>
 </head>
 <body>
@@ -57,6 +58,7 @@
             <div class="controls">
                 <button onclick="triggerCSVUpload()">Upload CSV</button>
                 <button onclick="downloadCSV()">Download CSV</button>
+                <button onclick="createGroup()">Create Group</button>
             </div>
             <div id="error" class="error"></div>
         </div>
@@ -65,6 +67,7 @@
             <div id="map"></div>
         </div>
     </div>
+    <h2>Nodes</h2>
     <table id="nodeTable">
         <thead>
             <tr>
@@ -80,18 +83,30 @@
         </thead>
         <tbody id="nodeTableBody"></tbody>
     </table>
+    <h2>Groups</h2>
+    <table id="groupTable">
+        <thead>
+            <tr>
+                <th>Group Name</th>
+                <th>Included Nodes</th>
+                <th>Download</th>
+            </tr>
+        </thead>
+        <tbody id="groupTableBody"></tbody>
+    </table>
     <script>
-        // Initialize nodes from localStorage or sample data
+        // Initialize nodes and groups from localStorage or sample data
         const initialNodes = [
             { name: 'Site A', latitude: 39.9612, longitude: -82.9988, height: 10, notes: 'blah', included: false, primary: false },
             { name: 'Site B', latitude: 45.4215, longitude: -75.6972, height: 15, notes: 'bleh', included: false, primary: false },
             { name: 'Site C', latitude: 19.4326, longitude: -99.1332, height: 12, notes: 'nothing', included: false, primary: false }
         ];
         let nodes = JSON.parse(localStorage.getItem('nodes')) || initialNodes;
-        let editIndex = null; // Track node being edited
+        let groups = JSON.parse(localStorage.getItem('groups')) || [];
+        let editIndex = null;
 
         // Initialize Leaflet map
-        let map = L.map('map').setView([0, 0], 2); // Default view
+        let map = L.map('map').setView([0, 0], 2);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         }).addTo(map);
@@ -101,11 +116,10 @@
             navigator.geolocation.getCurrentPosition(
                 position => {
                     const { latitude, longitude } = position.coords;
-                    map.setView([latitude, longitude], 10); // Zoom level 10 for local view
+                    map.setView([latitude, longitude], 10);
                 },
                 error => {
                     console.error('Geolocation error:', error);
-                    // Fallback to sample data centroid if geolocation fails
                     const validNodes = nodes.filter(n => !isNaN(n.latitude) && !isNaN(n.longitude));
                     if (validNodes.length > 0) {
                         const avgLat = validNodes.reduce((sum, n) => sum + n.latitude, 0) / validNodes.length;
@@ -115,7 +129,6 @@
                 }
             );
         } else {
-            // Fallback if geolocation is not supported
             const validNodes = nodes.filter(n => !isNaN(n.latitude) && !isNaN(n.longitude));
             if (validNodes.length > 0) {
                 const avgLat = validNodes.reduce((sum, n) => sum + n.latitude, 0) / validNodes.length;
@@ -130,8 +143,8 @@
             document.getElementById('longitude').value = e.latlng.lng.toFixed(6);
         });
 
-        // Render table
-        function renderTable() {
+        // Render node table
+        function renderNodeTable() {
             const tbody = document.getElementById('nodeTableBody');
             tbody.innerHTML = '';
             nodes.forEach((node, index) => {
@@ -154,6 +167,22 @@
             localStorage.setItem('nodes', JSON.stringify(nodes));
         }
 
+        // Render group table
+        function renderGroupTable() {
+            const tbody = document.getElementById('groupTableBody');
+            tbody.innerHTML = '';
+            groups.forEach((group, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${group.name}</td>
+                    <td>${group.nodes.join(', ') || 'None'}</td>
+                    <td><span class="download-btn" onclick="downloadGroupCSV(${index})">⬇️</span></td>
+                `;
+                tbody.appendChild(row);
+            });
+            localStorage.setItem('groups', JSON.stringify(groups));
+        }
+
         // Add or update node
         function addNode() {
             const name = document.getElementById('name').value.trim();
@@ -168,7 +197,7 @@
             }
 
             if (editIndex !== null) {
-                // Update existing node
+                const oldName = nodes[editIndex].name;
                 nodes[editIndex] = {
                     name,
                     latitude,
@@ -178,11 +207,14 @@
                     included: nodes[editIndex].included,
                     primary: nodes[editIndex].primary
                 };
+                groups.forEach(group => {
+                    if (group.name === oldName) group.name = name;
+                    group.nodes = group.nodes.map(n => n === oldName ? name : n);
+                });
                 editIndex = null;
                 document.getElementById('addNodeBtn').textContent = 'Add Node';
                 document.getElementById('cancelBtn').style.display = 'none';
             } else {
-                // Add new node
                 nodes.push({
                     name,
                     latitude,
@@ -201,7 +233,8 @@
             document.getElementById('notes').value = '';
             document.getElementById('error').textContent = '';
 
-            renderTable();
+            renderNodeTable();
+            renderGroupTable();
         }
 
         // Edit node
@@ -233,17 +266,17 @@
         // Update included status
         function updateIncluded(index, checked) {
             nodes[index].included = checked;
-            if (nodes[index].primary) nodes[index].included = true; // Primary is always included
-            renderTable();
+            if (nodes[index].primary) nodes[index].included = true;
+            renderNodeTable();
         }
 
         // Set primary node
         function setPrimary(index) {
             nodes.forEach((node, i) => {
                 node.primary = (i === index);
-                if (i === index) node.included = true; // Primary is always included
+                if (i === index) node.included = true;
             });
-            renderTable();
+            renderNodeTable();
         }
 
         // Delete node with confirmation
@@ -253,13 +286,43 @@
                 return;
             }
             if (confirm(`Are you sure you want to delete "${nodes[index].name}"?`)) {
+                const nodeName = nodes[index].name;
                 nodes.splice(index, 1);
+                groups = groups.filter(group => group.name !== nodeName);
+                groups.forEach(group => {
+                    group.nodes = group.nodes.filter(n => n !== nodeName);
+                });
                 document.getElementById('error').textContent = '';
-                renderTable();
+                renderNodeTable();
+                renderGroupTable();
             }
         }
 
-        // Download nodes as CSV
+        // Create group
+        function createGroup() {
+            const primaryNode = nodes.find(n => n.primary);
+            const includedNodes = nodes.filter(n => n.included && !n.primary);
+            if (!primaryNode) {
+                document.getElementById('error').textContent = 'Please select a Primary node.';
+                return;
+            }
+            if (includedNodes.length === 0) {
+                document.getElementById('error').textContent = 'Please select at least one Included node.';
+                return;
+            }
+            if (groups.some(g => g.name === primaryNode.name)) {
+                document.getElementById('error').textContent = `Group "${primaryNode.name}" already exists.`;
+                return;
+            }
+            groups.push({
+                name: primaryNode.name,
+                nodes: includedNodes.map(n => n.name)
+            });
+            document.getElementById('error').textContent = '';
+            renderGroupTable();
+        }
+
+        // Download all nodes as CSV
         function downloadCSV() {
             const headers = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
             const rows = nodes.map(node => [
@@ -275,6 +338,28 @@
             const a = document.createElement('a');
             a.href = url;
             a.download = 'nodes.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Download group as CSV
+        function downloadGroupCSV(groupIndex) {
+            const group = groups[groupIndex];
+            const groupNodes = nodes.filter(node => node.name === group.name || group.nodes.includes(node.name));
+            const headers = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
+            const rows = groupNodes.map(node => [
+                `"${node.name.replace(/"/g, '""')}"`,
+                node.latitude,
+                node.longitude,
+                node.height || '',
+                `"${(node.notes || '').replace(/"/g, '""')}"`
+            ].join(','));
+            const csv = [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${group.name}.csv`;
             a.click();
             URL.revokeObjectURL(url);
         }
@@ -315,7 +400,7 @@
                 for (let i = 1; i < lines.length; i++) {
                     const row = lines[i].map(v => v.trim());
                     if (row.length < 3 || !row[0] || isNaN(parseFloat(row[1])) || isNaN(parseFloat(row[2]))) {
-                        continue; // Skip invalid/blank rows
+                        continue;
                     }
                     const height = row[3] ? parseFloat(row[3]) : null;
                     if (row[3] && isNaN(height)) {
@@ -339,17 +424,20 @@
                 const replace = confirm('Replace existing nodes with uploaded data? Click OK to replace, Cancel to append.');
                 if (replace) {
                     nodes = newNodes;
+                    groups = [];
                 } else {
                     nodes = [...nodes, ...newNodes];
                 }
                 document.getElementById('error').textContent = '';
-                renderTable();
+                renderNodeTable();
+                renderGroupTable();
             };
             reader.readAsText(file);
         }
 
         // Initial render
-        renderTable();
+        renderNodeTable();
+        renderGroupTable();
     </script>
 </body>
 </html>
