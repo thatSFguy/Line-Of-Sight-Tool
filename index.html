@@ -108,6 +108,9 @@
             toggleInputVisibility('group');
         });
 
+        // Update dropdown on focus
+        document.getElementById('groupSelect').addEventListener('focus', populateGroupDropdown);
+
         // Validate CSV data
         function validateCSV(lines) {
             if (lines.length < 2) return "CSV must have at least two rows (Site A + one Site B)";
