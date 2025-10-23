@@ -34,8 +34,8 @@ A simple web app to help determine the best placement for mesh network nodes.
 Example CSV format:
 
 ```csv
-name,lat,lon,antenna_height
-NodeA,37.7749,-122.4194,10
+Location Name,Latitude,Longitude,Height
+Base Node,37.7749,-122.4194,10
 NodeB,37.7840,-122.4090,8
 NodeC,37.7640,-122.4290,12
 
