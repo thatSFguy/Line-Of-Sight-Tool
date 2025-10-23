@@ -482,8 +482,13 @@
             div.className = 'chart-container';
             div.innerHTML = `<h3>Path Profile: ${nameA} to ${nameB}</h3><canvas id="${canvasId}"></canvas>`;
             document.getElementById('results').appendChild(div);
-
+            
             const ctx = document.getElementById(canvasId).getContext('2d');
+            const isDark = document.body.getAttribute('data-theme') === 'dark';
+            const terrainColor = isDark ? '#ecf0f1' : '#2c3e50';      // light in dark, dark in light
+            const losColor     = isDark ? '#e74c3c' : '#e74c3c';      // red stays red
+            const fillColor    = isDark ? 'rgba(236,240,241,0.15)' : 'rgba(44,62,80,0.1)';
+            
             new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -491,14 +496,14 @@
                     datasets: [{
                         label: 'Terrain Profile (Curvature Adjusted)',
                         data: heights.map((h, i) => h - curvature_adjust[i]),
-                        borderColor: '#2c3e50',
-                        backgroundColor: 'rgba(44, 62, 80, 0.1)',
+                        borderColor: terrainColor,
+                        backgroundColor: fillColor,
                         fill: true,
                         tension: 0.1
                     }, {
                         label: 'LOS Line',
                         data: los_line.map((l, i) => l - curvature_adjust[i]),
-                        borderColor: '#e74c3c',
+                        borderColor: losColor,
                         borderDash: [8, 4],
                         fill: false
                     }]
@@ -514,6 +519,8 @@
                     }
                 }
             });
+
+
 
             return { siteB: nameB, status: isLos, diffLoss: diffractionLoss.toFixed(2), fsLoss: fsLoss.toFixed(2), totalLoss: totalLoss.toFixed(2), latB, lonB, notesB };
         }
