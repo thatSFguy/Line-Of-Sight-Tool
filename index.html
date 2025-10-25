@@ -155,7 +155,25 @@
             align-items: center;
             justify-content: center;
         }
-
+        .theme-help {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
         .chart-container {
             margin: 20px 0;
             padding: 15px;
@@ -172,6 +190,7 @@
 <body>
 
     <button class="theme-toggle" onclick="toggleTheme()"></button>
+    <button class="theme-help" ><a href="instructions.html" target="_blank" class="help-icon" title="View Instructions">?</a></button>
 
     <h1>
         RF Line-of-Sight Tool (910 MHz) 
