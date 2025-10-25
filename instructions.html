@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RF Line-of-Sight Tool (910 MHz) and Node Manager Instructions</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            background-color: #f9f9f9;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        h1 {
+            font-size: 2em;
+            border-bottom: 2px solid #2c3e50;
+            padding-bottom: 10px;
+        }
+        h2 {
+            font-size: 1.5em;
+            margin-top: 20px;
+        }
+        h3 {
+            font-size: 1.2em;
+            margin-top: 15px;
+        }
+        p, li {
+            color: #333;
+        }
+        a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #2c3e50;
+            color: white;
+        }
+        code {
+            background-color: #e8ecef;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Instructions for Using the RF Line-of-Sight Tool (910 MHz) and Node Manager</h1>
+    <p>The <strong>RF Line-of-Sight Tool (910 MHz)</strong> is a web-based application for analyzing line-of-sight (LOS) for radio frequency (RF) propagation at 910 MHz, used in conjunction with the <strong>Node Manager</strong>. The Node Manager allows you to create, edit, and organize nodes (locations with geographic coordinates and attributes) and groups for LOS analysis. A group consists of one <strong>Primary Node</strong> and one or more <strong>Secondary Nodes</strong> (marked with the "Include" checkbox). Groups are automatically named after the Primary Node, with no option to customize the group name. The LOS tool calculates visibility from the Primary Node to each Secondary Node in a group, displaying results as "clear" or "obstructed" and visualizing paths on a Leaflet map. Data is stored in your browser's localStorage, so export it as a CSV file regularly to avoid loss when clearing your cache or switching devices.</p>
+    <ul>
+        <li><strong>Node Manager</strong>: <a href="https://thatsfguy.github.io/Line-Of-Sight-Tool/nodemgr.html">https://thatsfguy.github.io/Line-Of-Sight-Tool/nodemgr.html</a></li>
+        <li><strong>RF Line-of-Sight Tool</strong>: <a href="https://thatsfguy.github.io/Line-Of-Sight-Tool/index.html">https://thatsfguy.github.io/Line-Of-Sight-Tool/index.html</a></li>
+    </ul>
+
+    <h2>Getting Started</h2>
+    <ol>
+        <li><strong>Open the Node Manager</strong>: Load the Node Manager page in your browser. You'll see two main sections: <strong>Nodes</strong> and <strong>Groups</strong>, each with a table for managing data.</li>
+        <li><strong>Backup Reminder</strong>: A note at the top of both tools warns that data is stored in localStorage. To export:
+            <ul>
+                <li>In Node Manager, find the "Download CSV" button (typically near the top or in the Nodes section).</li>
+                <li>Click to save your nodes and groups as a CSV file. Import this file later to restore data.</li>
+            </ul>
+        </li>
+        <li><strong>Map Interaction</strong>: Node Manager includes an interactive Leaflet map. Use it to place and edit nodes:
+            <ul>
+                <li><strong>Click on the map</strong> to set Latitude (Lat) and Longitude (Lng) for a new or selected node.</li>
+                <li><strong>Click a marker</strong> (pin) on the map to edit that node's details.</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>Managing Nodes in Node Manager</h2>
+    <p>Nodes represent locations (e.g., antennas) with attributes like position, height, and notes, used for LOS calculations.</p>
+
+    <h3>Adding a Node</h3>
+    <ol>
+        <li>Fill in the node details in the provided form:
+            <ul>
+                <li><strong>Location Name</strong>: Enter a descriptive name (e.g., "Tower A").</li>
+                <li><strong>Latitude/Longitude</strong>: Type values manually (e.g., 37.7749, -122.4194) or click on the map to auto-fill.</li>
+                <li><strong>Height (m)</strong>: Enter the elevation above ground in meters (e.g., 50 for a 50m tower).</li>
+                <li><strong>Notes</strong>: Add optional details (e.g., "VHF antenna installed").</li>
+            </ul>
+        </li>
+        <li>Click <code>Add Node</code> to save. The node appears in the Nodes table, and a marker is added to the map.</li>
+    </ol>
+
+    <h3>Editing a Node</h3>
+    <ol>
+        <li>In the Nodes table, click the <code>Edit</code> icon/button in the <strong>Actions</strong> column (likely a pencil icon).
+            <ul>
+                <li>Alternatively, click the node's marker on the map.</li>
+            </ul>
+        </li>
+        <li>Update fields as needed (e.g., drag the marker to change coordinates).</li>
+        <li>Click <code>Save</code> to apply changes. The table and map update automatically.</li>
+    </ol>
+
+    <h3>Deleting a Node</h3>
+    <ol>
+        <li>In the <strong>Actions</strong> column, click the <code>Delete</code> icon/button (likely a trash can).</li>
+        <li>Confirm deletion. The node is removed from the table and any associated groups.</li>
+    </ol>
+
+    <h3>Nodes Table Columns</h3>
+    <table>
+        <tr>
+            <th>Column</th>
+            <th>Description</th>
+        </tr>
+        <tr>
+            <td><strong>Include</strong></td>
+            <td>Checkbox to mark the node as a Secondary Node for LOS calculations in a group.</td>
+        </tr>
+        <tr>
+            <td><strong>Primary</strong></td>
+            <td>Checkbox to designate the node as the Primary Node for LOS calculations in a group. Only one node per group can be Primary.</td>
+        </tr>
+        <tr>
+            <td><strong>Location Name</strong></td>
+            <td>Editable text field for the node's name.</td>
+        </tr>
+        <tr>
+            <td><strong>Latitude</strong></td>
+            <td>Numeric field for north-south position (e.g., 37.7749).</td>
+        </tr>
+        <tr>
+            <td><strong>Longitude</strong></td>
+            <td>Numeric field for east-west position (e.g., -122.4194).</td>
+        </tr>
+        <tr>
+            <td><strong>Height (m)</strong></td>
+            <td>Numeric field for elevation above ground (in meters).</td>
+        </tr>
+        <tr>
+            <td><strong>Notes</strong></td>
+            <td>Text area for free-form details.</td>
+        </tr>
+        <tr>
+            <td><strong>Actions</strong></td>
+            <td>Buttons for Edit/Delete.</td>
+        </tr>
+    </table>
+
+    <h2>Managing Groups in Node Manager</h2>
+    <p>Groups are used to process LOS plots at 910 MHz. Each group consists of one <strong>Primary Node</strong> and one or more <strong>Secondary Nodes</strong> (marked with the "Include" checkbox). Groups are automatically named after the Primary Node, with no option to customize the name.</p>
+
+    <h3>Adding a Group</h3>
+    <ol>
+        <li>In the Nodes table, check the <code>Primary</code> box for the node to serve as the Primary Node (only one per group). The group will be named after this node.</li>
+        <li>Check the <code>Include</code> boxes for nodes to include as Secondary Nodes.</li>
+        <li>Click <code>Create Group</code> to create the group.</li>
+        <li>If a group with the same Primary Node already exists, a popup will prompt you to confirm overwriting the existing group. Click <code>OK</code> to overwrite, or cancel to abort. The new group appears in the Groups table, named after the Primary Node.</li>
+    </ol>
+
+    <h3>Editing a Group</h3>
+    <ol>
+        <li>In the Nodes table, select a new <code>Primary</code> node or adjust the <code>Include</code> checkboxes for Secondary Nodes.</li>
+        <li>Click <code>Create Group</code>.</li>
+        <li>A popup will prompt you to confirm overwriting the existing group associated with the selected Primary Node. Click <code>OK</code> to overwrite, or cancel to abort. If overwritten, the group name updates automatically to match the new Primary Node.</li>
+    </ol>
+
+    <h3>Deleting a Group</h3>
+    <ol>
+        <li>In the Groups table, click the <code>Delete</code> icon/button in the <strong>Actions</strong> column.</li>
+        <li>Confirm. This removes the group but keeps the nodes intact.</li>
+    </ol>
+
+    <h3>Groups Table Columns</h3>
+    <table>
+        <tr>
+            <th>Column</th>
+            <th>Description</th>
+        </tr>
+        <tr>
+            <td><strong>Group Name</strong></td>
+            <td>Automatically set to the Primary Node's name (not editable).</td>
+        </tr>
+        <tr>
+            <td><strong>Included Nodes</strong></td>
+            <td>Displays the Primary Node and Secondary Nodes.</td>
+        </tr>
+        <tr>
+            <td><strong>Actions</strong></td>
+            <td>Buttons for Delete.</td>
+        </tr>
+    </table>
+
+    <h2>Running Line-of-Sight Analysis</h2>
+    <p>In the RF Line-of-Sight Tool (<a href="https://thatsfguy.github.io/Line-Of-Sight-Tool/index.html">https://thatsfguy.github.io/Line-Of-Sight-Tool/index.html</a>), select a group for analysis using the <strong>Data Source</strong> option, which offers two radio buttons:</p>
+    <ol>
+        <li><strong>CSV File</strong>:
+            <ul>
+                <li>Select the "CSV File" radio button.</li>
+                <li>An upload option appears. Click to upload a CSV file created manually or exported from Node Manager (using the "Download CSV" button).</li>
+                <li>The tool loads the group data from the CSV for analysis.</li>
+            </ul>
+        </li>
+        <li><strong>Group from Node Manager</strong>:
+            <ul>
+                <li>Select the "Group from Node Manager" radio button.</li>
+                <li>A picklist appears, listing groups stored in localStorage, each named after its Primary Node.</li>
+                <li>Select the desired group from the picklist. No CSV upload is needed.</li>
+            </ul>
+        </li>
+        <li><strong>Running the Analysis</strong>:
+            <ul>
+                <li>After selecting a group (via CSV or picklist), ensure it has one Primary Node and at least one Secondary Node.</li>
+                <li>Initiate the analysis (e.g., click a "Run" or "Analyze" button).</li>
+                <li>The tool will:
+                    <ul>
+                        <li>Calculate LOS at 910 MHz from the Primary Node to each Secondary Node.</li>
+                        <li>Display results as "clear" (visible) or "obstructed" (blocked by terrain or obstacles).</li>
+                        <li>Visualize the paths on a Leaflet map, with lines indicating clear or obstructed paths.</li>
+                    </ul>
+                </li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>Tips and Best Practices</h2>
+    <ul>
+        <li><strong>Map Usage</strong>: In Node Manager, zoom/pan the Leaflet map for precise node placement. Markers may be color-coded (e.g., Primary Node in red).</li>
+        <li><strong>Group Setup</strong>: Ensure exactly one node is marked as <code>Primary</code> per group and at least one node is marked as <code>Include</code> for LOS calculations. The group name automatically matches the Primary Node.</li>
+        <li><strong>Data Persistence</strong>: Data saves to localStorage—no login needed. Export CSV from Node Manager after significant changes to avoid data loss.</li>
+        <li><strong>LOS Analysis</strong>:
+            <ul>
+                <li>Accurate node heights and coordinates are critical for reliable RF LOS calculations at 910 MHz.</li>
+                <li>Obstructions (e.g., hills, buildings) are factored in based on terrain data used by the tool.</li>
+            </ul>
+        </li>
+        <li><strong>Troubleshooting</strong>:
+            <ul>
+                <li>If the map fails to load, verify your internet connection (uses Leaflet).</li>
+                <li>No LOS results? Confirm the group has a Primary Node and at least one Secondary Node, and check that the group was loaded correctly (via CSV or picklist).</li>
+                <li>For bulk import: Use the "Import CSV" feature in Node Manager to restore previously exported data.</li>
+            </ul>
+        </li>
+        <li><strong>Limitations</strong>: This is a client-side tool with no cloud sync. Desktop browsers provide the best experience.</li>
+    </ul>
+
+    <p>For issues or advanced features, check the GitHub repo or page source for updates. Happy RF mapping!</p>
+</body>
+</html>
