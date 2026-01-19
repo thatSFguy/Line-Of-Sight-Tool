@@ -21,6 +21,7 @@
         let saveTimeout = null;
         let isInitialized = false;
         let originalLocalStorage = null;
+        let isSyncing = false;  // Flag to prevent save during sync
 
         const STYLES = `
             #collab-modal-overlay {
@@ -433,16 +434,22 @@
 
         function syncToLocalStorage() {
             if (!cachedData) return;
+            isSyncing = true;  // Prevent saves while we update localStorage
             originalLocalStorage.setItem('nodes', JSON.stringify(cachedData.nodes || []));
             originalLocalStorage.setItem('groups', JSON.stringify(cachedData.groups || []));
+            // Reset flag after a short delay to allow the event to process
+            setTimeout(() => { isSyncing = false; }, 100);
         }
 
         function saveToServer() {
             if (!apiUrl || !currentKey) return;
+            if (isSyncing) return;  // Don't save if we're receiving sync data
 
             if (saveTimeout) clearTimeout(saveTimeout);
 
             saveTimeout = setTimeout(async () => {
+                if (isSyncing) return;  // Double-check before actually saving
+                
                 const nodes = JSON.parse(originalLocalStorage.getItem('nodes') || '[]');
                 const groups = JSON.parse(originalLocalStorage.getItem('groups') || '[]');
 
@@ -535,6 +542,7 @@
         // Periodic sync for collaboration
         setInterval(async () => {
             if (!apiUrl || !currentKey || !isInitialized) return;
+            if (isSyncing) return;  // Skip if already syncing
 
             try {
                 const response = await fetch(`${apiUrl}?key=${encodeURIComponent(currentKey)}`);
@@ -545,6 +553,7 @@
                     const localMod = new Date(cachedData?.lastModified || 0).getTime();
 
                     if (serverMod > localMod) {
+                        console.log('[Collab] Server has newer data, syncing...');
                         cachedData = result.data;
                         syncToLocalStorage();
                         console.log('[Collab] Synced updates from collaborators');
