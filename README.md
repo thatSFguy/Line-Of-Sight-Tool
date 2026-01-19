@@ -247,3 +247,149 @@ cp -r data/ backup-$(date +%Y%m%d)/
 ```
 
 Each file is named `{key}.json` and contains the complete workspace state.
+
+# Line-of-Sight Tool - Cloudflare Worker API
+
+A serverless backend for collaborative node editing, running on Cloudflare Workers with KV storage.
+
+## Why Cloudflare Workers?
+
+- **Free tier**: 100,000 requests/day
+- **Fast**: Edge deployment worldwide
+- **No server to manage**: Fully serverless
+- **KV Storage included**: 100,000 reads/day, 1,000 writes/day free
+
+## Quick Setup (5 minutes)
+
+### 1. Install Wrangler CLI
+
+```bash
+npm install -g wrangler
+```
+
+### 2. Login to Cloudflare
+
+```bash
+wrangler login
+```
+
+This opens a browser to authenticate.
+
+### 3. Create KV Namespace
+
+```bash
+cd cloudflare-worker
+wrangler kv:namespace create "LOS_DATA"
+```
+
+You'll see output like:
+```
+🌀 Creating namespace with title "los-collab-api-LOS_DATA"
+✨ Success!
+Add the following to your configuration file in your kv_namespaces array:
+{ binding = "LOS_DATA", id = "abc123your-namespace-id" }
+```
+
+### 4. Update wrangler.toml
+
+Edit `wrangler.toml` and replace `YOUR_KV_NAMESPACE_ID_HERE` with the ID from step 3:
+
+```toml
+[[kv_namespaces]]
+binding = "LOS_DATA"
+id = "abc123your-namespace-id"
+```
+
+### 5. Deploy
+
+```bash
+wrangler deploy
+```
+
+You'll get a URL like: `https://los-collab-api.YOUR-SUBDOMAIN.workers.dev`
+
+That's your API URL!
+
+## Usage
+
+Your API is now live. Use it in the Node Manager:
+
+1. Open Node Manager
+2. Click the "Local Only" badge
+3. Enter your Worker URL: `https://los-collab-api.YOUR-SUBDOMAIN.workers.dev`
+4. Click "Create New Key"
+5. Share the key with collaborators
+
+## API Endpoints
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| `POST` | `?action=newkey` | Create a new workspace |
+| `GET` | `?key=XXXXXXXXXXXXXXXX` | Get data for a key |
+| `POST` | `?key=XXXXXXXXXXXXXXXX` | Save data (JSON body) |
+| `GET` | `?action=status` | Get server status |
+
+## Configuration
+
+Edit the `CONFIG` object in `worker.js`:
+
+```javascript
+const CONFIG = {
+    MAX_KEYS: 50,           // Maximum workspaces
+    MAX_NODES: 400,         // Max nodes per workspace
+    MAX_GROUPS: 100,        // Max groups per workspace
+    MAX_JSON_SIZE: 512000,  // 512KB max payload
+    KEY_LENGTH: 16,         // Key length
+};
+```
+
+## Local Development
+
+Test locally before deploying:
+
+```bash
+wrangler dev
+```
+
+This starts a local server at `http://localhost:8787`
+
+## Custom Domain (Optional)
+
+1. Go to Cloudflare Dashboard → Workers → your worker
+2. Click "Triggers" → "Custom Domains"
+3. Add your domain (must be on Cloudflare DNS)
+
+## Monitoring
+
+View logs in real-time:
+
+```bash
+wrangler tail
+```
+
+Or check the Cloudflare Dashboard → Workers → your worker → "Logs"
+
+## Costs
+
+**Free tier includes:**
+- 100,000 requests/day
+- 100,000 KV reads/day
+- 1,000 KV writes/day
+
+For a small collaboration group, you'll never hit these limits.
+
+## Troubleshooting
+
+**"KV namespace not found"**
+- Make sure you ran `wrangler kv:namespace create "LOS_DATA"`
+- Make sure you updated `wrangler.toml` with the correct ID
+
+**CORS errors**
+- The worker includes CORS headers for all origins
+- If you need to restrict origins, edit `CORS_HEADERS` in `worker.js`
+
+**"Too many workspaces"**
+- Default limit is 50 workspaces
+- Increase `MAX_KEYS` in the config, or delete old workspaces via KV dashboard
+
+- 
