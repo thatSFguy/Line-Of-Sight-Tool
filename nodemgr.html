@@ -1280,13 +1280,18 @@
         // Listen for collaboration sync events
         window.addEventListener('collab-sync', () => {
             console.log('[Collab] Refreshing UI with new data');
-            // Reload data from localStorage
-            nodes = JSON.parse(localStorage.getItem('nodes')) || [];
-            groups = JSON.parse(localStorage.getItem('groups')) || [];
+            // Reload data from localStorage (use the real localStorage, not the proxy)
+            const storedNodes = localStorage.getItem('nodes');
+            const storedGroups = localStorage.getItem('groups');
+            console.log('[Collab] Raw nodes from storage:', storedNodes ? storedNodes.substring(0, 100) + '...' : 'null');
+            nodes = JSON.parse(storedNodes || '[]');
+            groups = JSON.parse(storedGroups || '[]');
+            console.log('[Collab] Parsed nodes count:', nodes.length, 'groups count:', groups.length);
             // Re-render everything
             renderNodeTable();
             renderGroupTable();
             updateMapMarkers();
+            console.log('[Collab] UI refresh complete');
         });
 
         // Initial render
