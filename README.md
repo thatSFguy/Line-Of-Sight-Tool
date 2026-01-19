@@ -128,3 +128,122 @@ In the RF Line-of-Sight Tool ([https://thatsfguy.github.io/Line-Of-Sight-Tool/in
 - **Limitations**: This is a client-side tool with no cloud sync. Desktop browsers provide the best experience.
 
 For issues or advanced features, check the GitHub repo or page source for updates. Happy RF mapping!
+
+
+
+
+
+# Line-of-Sight Tool - Collaborative Backend
+
+This adds shared/collaborative editing to the Line-of-Sight Tool using a simple PHP backend with JSON file storage.
+
+## Files
+
+- `api.php` - The PHP backend that handles data storage
+- `shared-storage.js` - JavaScript that integrates with the frontend
+
+## Quick Setup
+
+### 1. Server Setup
+
+Upload `api.php` to your web server (any PHP 7.4+ host will work).
+
+Create a `data` directory in the same folder:
+```bash
+mkdir data
+chmod 755 data
+```
+
+Create a `.htaccess` file inside the `data` directory to prevent direct access:
+```
+# data/.htaccess
+Deny from all
+```
+
+### 2. Frontend Setup
+
+Add the JavaScript to `nodemgr.html`. Open the file and add this line near the top, inside the `<head>` tag, BEFORE any other scripts:
+
+```html
+<script src="shared-storage.js"></script>
+```
+
+Or if hosting the JS elsewhere, use the full URL:
+```html
+<script src="https://yourserver.com/path/to/shared-storage.js"></script>
+```
+
+That's it! No hardcoded configuration needed.
+
+## Usage
+
+1. Open the Node Manager - you'll see a "Local Only" indicator in the top right
+2. Click the indicator to open Collaboration Settings
+3. Enter your API URL (where you hosted `api.php`)
+4. Click **"Create New Key"** to generate a 16-character workspace key
+5. Click **"Connect"** to start using the shared workspace
+6. Share the API URL and key with collaborators
+7. Changes sync automatically (saves within 1 second, polls for updates every 30 seconds)
+
+Each user configures their own API URL and key through the UI - nothing is hardcoded. Settings are remembered in the browser.
+
+## Configuration Options
+
+Edit the constants at the top of `api.php`:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `MAX_KEYS` | 50 | Maximum number of workspaces (JSON files) |
+| `MAX_NODES` | 400 | Maximum nodes per workspace |
+| `MAX_GROUPS` | 100 | Maximum groups per workspace |
+| `MAX_JSON_SIZE` | 512KB | Maximum payload size |
+| `KEY_LENGTH` | 16 | Length of generated keys |
+| `ALLOWED_ORIGINS` | `*` | CORS origins (set to your domain in production) |
+
+## API Endpoints
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| `POST` | `?action=newkey` | Create a new workspace, returns the key |
+| `GET` | `?key=XXXXXXXXXXXXXXXX` | Get all data for a key |
+| `POST` | `?key=XXXXXXXXXXXXXXXX` | Save data for a key (JSON body) |
+| `GET` | `?action=status` | Get server status and limits |
+
+## Security Features
+
+- **Input validation**: All data is validated for type, range, and length
+- **Sanitization**: Strings are HTML-encoded to prevent XSS
+- **Path traversal prevention**: Keys are strictly alphanumeric
+- **Size limits**: Payload size, node count, and file count are all limited
+- **No SQL**: JSON files eliminate SQL injection entirely
+- **CORS headers**: Configurable allowed origins
+- **File locking**: Uses `LOCK_EX` to prevent race conditions
+
+## Troubleshooting
+
+**"Key not found" error**
+- The key doesn't exist. Create a new one or check for typos.
+
+**"Maximum number of shared workspaces reached"**
+- Delete old JSON files from the `data` directory, or increase `MAX_KEYS`.
+
+**"Too many nodes"**
+- You've hit the 400 node limit. Increase `MAX_NODES` or split into multiple workspaces.
+
+**Changes not syncing**
+- Check browser console for network errors
+- Verify `API_URL` is correct and accessible
+- Check that the `data` directory is writable
+
+**CORS errors**
+- Set `ALLOWED_ORIGINS` to your specific domain instead of `*`
+
+## Backup
+
+All data is stored as JSON files in the `data` directory. To backup:
+
+```bash
+cp -r data/ backup-$(date +%Y%m%d)/
+```
+
+Each file is named `{key}.json` and contains the complete workspace state.
