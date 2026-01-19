@@ -117,7 +117,7 @@ function count_keys() {
 }
 
 /**
- * Validate node structure
+ * Validate node structure - matches Line-of-Sight Tool format
  */
 function validate_node($node, $index) {
     if (!is_array($node)) {
@@ -125,21 +125,26 @@ function validate_node($node, $index) {
     }
     
     // Required fields
-    $required = ['id', 'name', 'lat', 'lng'];
-    foreach ($required as $field) {
-        if (!isset($node[$field])) {
-            return "Node at index $index missing required field: $field";
-        }
+    if (!isset($node['name']) || empty(trim($node['name']))) {
+        return "Node at index $index missing required field: name";
+    }
+    
+    // Support both 'latitude'/'longitude' and 'lat'/'lng'
+    $lat = $node['latitude'] ?? $node['lat'] ?? null;
+    $lng = $node['longitude'] ?? $node['lng'] ?? null;
+    
+    if ($lat === null || $lng === null) {
+        return "Node at index $index missing latitude/longitude";
     }
     
     // Validate types and ranges
-    if (!is_numeric($node['lat']) || $node['lat'] < -90 || $node['lat'] > 90) {
+    if (!is_numeric($lat) || $lat < -90 || $lat > 90) {
         return "Node at index $index has invalid latitude";
     }
-    if (!is_numeric($node['lng']) || $node['lng'] < -180 || $node['lng'] > 180) {
+    if (!is_numeric($lng) || $lng < -180 || $lng > 180) {
         return "Node at index $index has invalid longitude";
     }
-    if (isset($node['height']) && (!is_numeric($node['height']) || $node['height'] < 0 || $node['height'] > 10000)) {
+    if (isset($node['height']) && $node['height'] !== null && (!is_numeric($node['height']) || $node['height'] < 0 || $node['height'] > 10000)) {
         return "Node at index $index has invalid height";
     }
     
@@ -155,9 +160,10 @@ function validate_node($node, $index) {
 }
 
 /**
- * Validate group structure
+ * Validate group structure - matches Line-of-Sight Tool format
+ * Groups have 'name' and 'nodes' (array of node names as strings)
  */
-function validate_group($group, $index, $valid_node_ids) {
+function validate_group($group, $index, $valid_node_names) {
     if (!is_array($group)) {
         return "Group at index $index is not an object";
     }
@@ -166,15 +172,13 @@ function validate_group($group, $index, $valid_node_ids) {
         return "Group at index $index has invalid name";
     }
     
-    if (!isset($group['primaryNodeId'])) {
-        return "Group at index $index missing primaryNodeId";
-    }
-    
-    if (isset($group['nodeIds']) && is_array($group['nodeIds'])) {
-        foreach ($group['nodeIds'] as $nodeId) {
-            if (!in_array($nodeId, $valid_node_ids)) {
-                return "Group at index $index references non-existent node: $nodeId";
+    if (isset($group['nodes']) && is_array($group['nodes'])) {
+        foreach ($group['nodes'] as $nodeName) {
+            if (!is_string($nodeName)) {
+                return "Group at index $index has invalid node reference";
             }
+            // Note: We don't strictly validate node names exist, since
+            // the app might have groups referencing deleted nodes
         }
     }
     
@@ -209,16 +213,16 @@ function validate_data($data) {
     }
     
     // Validate each node
-    $valid_node_ids = [];
+    $valid_node_names = [];
     foreach ($data['nodes'] as $i => $node) {
         $result = validate_node($node, $i);
         if ($result !== true) return $result;
-        $valid_node_ids[] = $node['id'];
+        $valid_node_names[] = $node['name'];
     }
     
     // Validate each group
     foreach ($data['groups'] as $i => $group) {
-        $result = validate_group($group, $i, $valid_node_ids);
+        $result = validate_group($group, $i, $valid_node_names);
         if ($result !== true) return $result;
     }
     
@@ -227,6 +231,7 @@ function validate_data($data) {
 
 /**
  * Sanitize data for storage (strip unexpected fields, encode strings)
+ * Matches the Line-of-Sight Tool's data structure exactly
  */
 function sanitize_data($data) {
     $clean = [
@@ -237,23 +242,26 @@ function sanitize_data($data) {
     
     foreach ($data['nodes'] as $node) {
         $clean['nodes'][] = [
-            'id' => $node['id'],
-            'name' => htmlspecialchars(substr($node['name'], 0, 200), ENT_QUOTES, 'UTF-8'),
-            'lat' => floatval($node['lat']),
-            'lng' => floatval($node['lng']),
-            'height' => isset($node['height']) ? floatval($node['height']) : 0,
+            'name' => htmlspecialchars(substr($node['name'] ?? '', 0, 200), ENT_QUOTES, 'UTF-8'),
+            'latitude' => floatval($node['latitude'] ?? $node['lat'] ?? 0),
+            'longitude' => floatval($node['longitude'] ?? $node['lng'] ?? 0),
+            'height' => isset($node['height']) && $node['height'] !== null ? floatval($node['height']) : null,
             'notes' => isset($node['notes']) ? htmlspecialchars(substr($node['notes'], 0, 1000), ENT_QUOTES, 'UTF-8') : '',
-            'isPrimary' => !empty($node['isPrimary']),
-            'isIncluded' => !empty($node['isIncluded'])
+            'included' => !empty($node['included']),
+            'primary' => !empty($node['primary'])
         ];
     }
     
     foreach ($data['groups'] as $group) {
+        $cleanNodes = [];
+        if (isset($group['nodes']) && is_array($group['nodes'])) {
+            foreach ($group['nodes'] as $nodeName) {
+                $cleanNodes[] = htmlspecialchars(substr($nodeName, 0, 200), ENT_QUOTES, 'UTF-8');
+            }
+        }
         $clean['groups'][] = [
-            'id' => $group['id'] ?? uniqid(),
-            'name' => htmlspecialchars(substr($group['name'], 0, 200), ENT_QUOTES, 'UTF-8'),
-            'primaryNodeId' => $group['primaryNodeId'],
-            'nodeIds' => $group['nodeIds'] ?? []
+            'name' => htmlspecialchars(substr($group['name'] ?? '', 0, 200), ENT_QUOTES, 'UTF-8'),
+            'nodes' => $cleanNodes
         ];
     }
     
