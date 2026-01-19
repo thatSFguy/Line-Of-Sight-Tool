@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="30" fill="#2c3e50"/>
+  
+  <!-- Mountains/terrain -->
+  <polygon points="8,48 20,32 28,40 38,28 48,36 56,48" fill="#34495e"/>
+  
+  <!-- Tower on left peak -->
+  <rect x="18" y="24" width="4" height="12" fill="#e74c3c"/>
+  <polygon points="20,24 16,28 24,28" fill="#e74c3c"/>
+  
+  <!-- Tower on right -->
+  <rect x="46" y="28" width="4" height="12" fill="#3498db"/>
+  <polygon points="48,28 44,32 52,32" fill="#3498db"/>
+  
+  <!-- LOS line (dashed effect with gaps) -->
+  <line x1="20" y1="26" x2="48" y2="30" stroke="#2ecc71" stroke-width="2" stroke-dasharray="4,2"/>
+  
+  <!-- Radio waves from left tower -->
+  <path d="M 24 22 Q 28 20 28 26" fill="none" stroke="#e74c3c" stroke-width="1.5" opacity="0.7"/>
+  <path d="M 26 20 Q 32 17 32 27" fill="none" stroke="#e74c3c" stroke-width="1.5" opacity="0.5"/>
+  
+  <!-- Radio waves from right tower -->
+  <path d="M 44 26 Q 40 24 40 30" fill="none" stroke="#3498db" stroke-width="1.5" opacity="0.7"/>
+  <path d="M 42 24 Q 36 21 36 31" fill="none" stroke="#3498db" stroke-width="1.5" opacity="0.5"/>
+</svg>
