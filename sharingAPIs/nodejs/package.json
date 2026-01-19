@@ -1,0 +1,21 @@
+{
+  "name": "los-collab-api",
+  "version": "1.0.0",
+  "description": "Line-of-Sight Tool Collaborative Storage API",
+  "main": "api.js",
+  "scripts": {
+    "start": "node api.js",
+    "dev": "node --watch api.js"
+  },
+  "keywords": [
+    "line-of-sight",
+    "rf",
+    "collaboration",
+    "api"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
