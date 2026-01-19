@@ -184,6 +184,37 @@
         [data-theme="dark"] .chart-container {
             background: #34495e;
         }
+
+        .progress-container {
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        [data-theme="dark"] .progress-container {
+            background: #34495e;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--primary);
+            transition: width 0.3s;
+        }
+
+        .progress-text {
+            margin-top: 8px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -204,11 +235,11 @@
 
     <div class="form-group">
         <label>Data Source:</label>
-        <input type="radio" name="dataSource" id="sourceCSV" value="csv" checked> CSV File
-        <input type="radio" name="dataSource" id="sourceGroup" value="group"> Group from Node Manager
+        <input type="radio" name="dataSource" id="sourceCSV" value="csv"> CSV File
+        <input type="radio" name="dataSource" id="sourceGroup" value="group" checked> Group from Node Manager
     </div>
 
-    <div class="form-group" id="csvInput">
+    <div class="form-group" id="csvInput" style="display: none;">
         <label>Upload CSV File:</label>
         <input type="file" id="csvFile" accept=".csv">
         <br>
@@ -216,10 +247,10 @@
            download="RF_locations_sample.csv" class="sample-link">Download Sample CSV</a>
     </div>
 
-    <div class="form-group" id="groupInput" style="display: none;">
+    <div class="form-group" id="groupInput">
         <label>Select Group:</label>
         <select id="groupSelect">
-            <option value="">Select a group</option>
+            <option value="__ALL_NODES__">All Nodes (all unique pairs)</option>
         </select>
     </div>
 
@@ -275,7 +306,8 @@
 
         function populateGroupDropdown() {
             const groupSelect = document.getElementById('groupSelect');
-            groupSelect.innerHTML = '<option value="">Select a group</option>';
+            // Preserve "All Nodes" as first option
+            groupSelect.innerHTML = '<option value="__ALL_NODES__">All Nodes (all unique pairs)</option>';
             const groups = JSON.parse(localStorage.getItem('groups')) || [];
             groups.forEach(group => {
                 const option = document.createElement('option');
@@ -299,7 +331,8 @@
         }
 
         function restoreDataSource() {
-            const savedSource = localStorage.getItem('dataSource') || 'csv';
+            // Default to 'group' instead of 'csv'
+            const savedSource = localStorage.getItem('dataSource') || 'group';
             document.getElementById('sourceCSV').checked = savedSource === 'csv';
             document.getElementById('sourceGroup').checked = savedSource === 'group';
             toggleInputVisibility(savedSource);
@@ -362,6 +395,33 @@
                 String(node.notes || '')
             ]);
             return [headers, ...rows];
+        }
+
+        // Get all nodes for "All Nodes" option
+        function getAllNodesData() {
+            const nodes = JSON.parse(localStorage.getItem('nodes')) || [];
+            if (nodes.length < 2) return null;
+            return nodes.map(node => ({
+                'Location Name': node.name,
+                'Latitude': node.latitude,
+                'Longitude': node.longitude,
+                'Height': node.height,
+                'Notes': node.notes || ''
+            }));
+        }
+
+        // Generate all unique pairs (no duplicates: A-B is same as B-A)
+        function generateUniquePairs(nodes) {
+            const pairs = [];
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    pairs.push({
+                        nodeA: nodes[i],
+                        nodeB: nodes[j]
+                    });
+                }
+            }
+            return pairs;
         }
 
         function getTileName(lat, lon) {
@@ -454,7 +514,7 @@
             return 32.45 + 20 * Math.log10(d_km) + 20 * Math.log10(freq_mhz);
         }
 
-        async function processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, notesB, losThreshold) {
+        async function processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, notesA, notesB, losThreshold, skipChart = false) {
             const profile = await getHeightProfile(latA, lonA, latB, lonB, HPROF_STEP);
             const distances = profile.distances;
             const heights = profile.heights;
@@ -495,57 +555,209 @@
             const totalLoss = fsLoss + diffractionLoss;
             const isLos = diffractionLoss < losThreshold ? 'Clear' : 'Obstructed';
 
-            const canvasId = 'chart_' + nameB.replace(/\s/g, '_');
-            const div = document.createElement('div');
-            div.className = 'chart-container';
-            div.innerHTML = `<h3>Path Profile: ${nameA} to ${nameB}</h3><canvas id="${canvasId}"></canvas>`;
-            document.getElementById('results').appendChild(div);
-            
-            const ctx = document.getElementById(canvasId).getContext('2d');
-            const isDark = document.body.getAttribute('data-theme') === 'dark';
-            const terrainColor = isDark ? '#ecf0f1' : '#2c3e50';      // light in dark, dark in light
-            const losColor     = isDark ? '#e74c3c' : '#e74c3c';      // red stays red
-            const fillColor    = isDark ? 'rgba(236,240,241,0.15)' : 'rgba(44,62,80,0.1)';
-            
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: distances,
-                    datasets: [{
-                        label: 'Terrain Profile (Curvature Adjusted)',
-                        data: heights.map((h, i) => h - curvature_adjust[i]),
-                        borderColor: terrainColor,
-                        backgroundColor: fillColor,
-                        fill: true,
-                        tension: 0.1
-                    }, {
-                        label: 'LOS Line',
-                        data: los_line.map((l, i) => l - curvature_adjust[i]),
-                        borderColor: losColor,
-                        borderDash: [8, 4],
-                        fill: false
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { position: 'top' }
+            // Only create chart if not skipped (for "All Nodes" mode, we skip individual charts)
+            if (!skipChart) {
+                const canvasId = 'chart_' + nameA.replace(/\s/g, '_') + '_to_' + nameB.replace(/\s/g, '_');
+                const div = document.createElement('div');
+                div.className = 'chart-container';
+                div.innerHTML = `<h3>Path Profile: ${nameA} to ${nameB}</h3><canvas id="${canvasId}"></canvas>`;
+                document.getElementById('results').appendChild(div);
+                
+                const ctx = document.getElementById(canvasId).getContext('2d');
+                const isDark = document.body.getAttribute('data-theme') === 'dark';
+                const terrainColor = isDark ? '#ecf0f1' : '#2c3e50';
+                const losColor     = isDark ? '#e74c3c' : '#e74c3c';
+                const fillColor    = isDark ? 'rgba(236,240,241,0.15)' : 'rgba(44,62,80,0.1)';
+                
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: distances,
+                        datasets: [{
+                            label: 'Terrain Profile (Curvature Adjusted)',
+                            data: heights.map((h, i) => h - curvature_adjust[i]),
+                            borderColor: terrainColor,
+                            backgroundColor: fillColor,
+                            fill: true,
+                            tension: 0.1
+                        }, {
+                            label: 'LOS Line',
+                            data: los_line.map((l, i) => l - curvature_adjust[i]),
+                            borderColor: losColor,
+                            borderDash: [8, 4],
+                            fill: false
+                        }]
                     },
-                    scales: {
-                        x: { title: { display: true, text: 'Distance [miles]' } },
-                        y: { title: { display: true, text: 'Height [m]' } }
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { position: 'top' }
+                        },
+                        scales: {
+                            x: { title: { display: true, text: 'Distance [miles]' } },
+                            y: { title: { display: true, text: 'Height [m]' } }
+                        }
                     }
-                }
+                });
+            }
+
+            return { 
+                nameA, nameB, 
+                latA, lonA, latB, lonB,
+                notesA, notesB,
+                status: isLos, 
+                diffLoss: diffractionLoss.toFixed(2), 
+                fsLoss: fsLoss.toFixed(2), 
+                totalLoss: totalLoss.toFixed(2),
+                distance: totalDist.toFixed(2)
+            };
+        }
+
+        async function processAllNodes(defaultHeight, losThreshold) {
+            const resultsDiv = document.getElementById('results');
+            const allNodes = getAllNodesData();
+            
+            if (!allNodes || allNodes.length < 2) {
+                resultsDiv.innerHTML = '<p class="error">Need at least 2 nodes in Node Manager to run All Nodes analysis.</p>';
+                return;
+            }
+
+            const pairs = generateUniquePairs(allNodes);
+            const totalPairs = pairs.length;
+            
+            resultsDiv.innerHTML = `
+                <div class="progress-container">
+                    <h3>Processing ${totalPairs} unique pairs...</h3>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">0 / ${totalPairs}</div>
+                </div>
+            `;
+
+            // Setup map
+            if (map) map.remove();
+            const mapDiv = document.getElementById('map');
+            mapDiv.innerHTML = '';
+            const centerLat = allNodes.reduce((sum, n) => sum + n['Latitude'], 0) / allNodes.length;
+            const centerLon = allNodes.reduce((sum, n) => sum + n['Longitude'], 0) / allNodes.length;
+            map = L.map('map').setView([centerLat, centerLon], 7);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            // Add all node markers
+            allNodes.forEach(node => {
+                L.marker([node['Latitude'], node['Longitude']], {
+                    icon: L.icon({ 
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png', 
+                        iconSize: [25, 41], 
+                        iconAnchor: [12, 41] 
+                    })
+                }).addTo(map).bindPopup(`${node['Location Name']}${node['Notes'] ? '<br>Notes: ' + node['Notes'] : ''}`);
             });
 
+            const results = [];
+            
+            for (let i = 0; i < pairs.length; i++) {
+                const pair = pairs[i];
+                const nodeA = pair.nodeA;
+                const nodeB = pair.nodeB;
+                
+                const result = await processPair(
+                    nodeA['Location Name'], nodeA['Latitude'], nodeA['Longitude'], nodeA['Height'] || defaultHeight,
+                    nodeB['Location Name'], nodeB['Latitude'], nodeB['Longitude'], nodeB['Height'] || defaultHeight,
+                    nodeA['Notes'], nodeB['Notes'],
+                    losThreshold,
+                    true  // Skip individual charts for All Nodes mode
+                );
+                results.push(result);
 
+                // Draw line on map
+                L.polyline([[result.latA, result.lonA], [result.latB, result.lonB]], { 
+                    color: result.status === 'Clear' ? '#3498db' : '#e74c3c', 
+                    weight: 2,
+                    opacity: 0.7
+                }).addTo(map);
 
-            return { siteB: nameB, status: isLos, diffLoss: diffractionLoss.toFixed(2), fsLoss: fsLoss.toFixed(2), totalLoss: totalLoss.toFixed(2), latB, lonB, notesB };
+                // Update progress
+                const progress = ((i + 1) / totalPairs * 100).toFixed(1);
+                document.getElementById('progressFill').style.width = progress + '%';
+                document.getElementById('progressText').textContent = `${i + 1} / ${totalPairs} (${progress}%)`;
+            }
+
+            // Fit map to all nodes
+            const bounds = allNodes.map(n => [n['Latitude'], n['Longitude']]);
+            map.fitBounds(bounds, { padding: [50, 50] });
+
+            // Build results table
+            resultsDiv.innerHTML = '';
+            
+            const table = document.createElement('table');
+            table.innerHTML = `
+                <tr>
+                    <th>Site A</th>
+                    <th>Site B</th>
+                    <th>Distance (mi)</th>
+                    <th>LOS Status</th>
+                    <th>Diffraction Loss (dB)</th>
+                    <th>Free-Space Loss (dB)</th>
+                    <th>Total Loss (dB)</th>
+                </tr>
+            `;
+
+            // Sort results: Clear first, then by distance
+            results.sort((a, b) => {
+                if (a.status !== b.status) return a.status === 'Clear' ? -1 : 1;
+                return parseFloat(a.distance) - parseFloat(b.distance);
+            });
+
+            results.forEach(r => {
+                const tr = document.createElement('tr');
+                const statusColor = r.status === 'Clear' ? 'var(--success)' : 'var(--danger)';
+                tr.innerHTML = `
+                    <td>${r.nameA}</td>
+                    <td>${r.nameB}</td>
+                    <td>${r.distance}</td>
+                    <td style="color: ${statusColor}; font-weight: bold;">${r.status}</td>
+                    <td>${r.diffLoss}</td>
+                    <td>${r.fsLoss}</td>
+                    <td>${r.totalLoss}</td>
+                `;
+                table.appendChild(tr);
+            });
+
+            const clearCount = results.filter(r => r.status === 'Clear').length;
+            const obstructedCount = results.filter(r => r.status === 'Obstructed').length;
+
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <h2>All Nodes LOS Results</h2>
+                <p><strong>${allNodes.length}</strong> nodes, <strong>${totalPairs}</strong> unique pairs analyzed</p>
+                <p>
+                    <span style="color: var(--success); font-weight: bold;">Clear: ${clearCount}</span> | 
+                    <span style="color: var(--danger); font-weight: bold;">Obstructed: ${obstructedCount}</span>
+                </p>
+            `;
+            div.appendChild(table);
+            resultsDiv.appendChild(div);
         }
 
         async function processData() {
             const source = document.querySelector('input[name="dataSource"]:checked').value;
             const resultsDiv = document.getElementById('results');
+            const defaultHeight = parseFloat(document.getElementById('defaultHeight').value);
+            const losThreshold = parseFloat(document.getElementById('losThreshold').value);
+
+            // Handle "All Nodes" special case
+            if (source === 'group') {
+                const groupName = document.getElementById('groupSelect').value;
+                if (groupName === '__ALL_NODES__') {
+                    await processAllNodes(defaultHeight, losThreshold);
+                    return;
+                }
+            }
+
             resultsDiv.innerHTML = '<p>Loading terrain data and calculating paths...</p>';
 
             let lines;
@@ -577,8 +789,6 @@
             }
 
             const data = validation.validRows;
-            const defaultHeight = parseFloat(document.getElementById('defaultHeight').value);
-            const losThreshold = parseFloat(document.getElementById('losThreshold').value);
 
             const locA = data[0];
             const nameA = locA['Location Name'];
@@ -607,7 +817,7 @@
                 const lonB = locB['Longitude'];
                 const hB = locB['Height'] || defaultHeight;
                 const notesB = locB['Notes'];
-                const result = await processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, notesB, losThreshold);
+                const result = await processPair(nameA, latA, lonA, hA, nameB, latB, lonB, hB, notesA, notesB, losThreshold);
                 results.push(result);
             }
 
@@ -618,7 +828,7 @@
             results.forEach(r => {
                 L.marker([r.latB, r.lonB], {
                     icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41] })
-                }).addTo(map).bindPopup(`${r.siteB}${r.notesB ? '<br>Notes: ' + r.notesB : ''}`);
+                }).addTo(map).bindPopup(`${r.nameB}${r.notesB ? '<br>Notes: ' + r.notesB : ''}`);
                 L.polyline([[latA, lonA], [r.latB, r.lonB]], { 
                     color: r.status === 'Clear' ? '#3498db' : '#e74c3c', 
                     weight: 3,
@@ -631,7 +841,7 @@
 
             results.forEach(r => {
                 const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${r.siteB}</td><td><strong>${r.status}</strong></td><td>${r.diffLoss}</td><td>${r.fsLoss}</td><td>${r.totalLoss}</td><td>${r.notesB}</td>`;
+                tr.innerHTML = `<td>${r.nameB}</td><td><strong>${r.status}</strong></td><td>${r.diffLoss}</td><td>${r.fsLoss}</td><td>${r.totalLoss}</td><td>${r.notesB}</td>`;
                 table.appendChild(tr);
             });
 
