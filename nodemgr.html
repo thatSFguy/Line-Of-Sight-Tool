@@ -565,7 +565,7 @@
             } catch (e) {
                 // Silent fail on polling
             }
-        }, 60000); // Poll every 60 seconds
+        }, 300000); // Poll every 5 minutes
 
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initialize);
