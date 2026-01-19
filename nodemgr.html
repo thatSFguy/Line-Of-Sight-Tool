@@ -548,16 +548,14 @@
                         cachedData = result.data;
                         syncToLocalStorage();
                         console.log('[Collab] Synced updates from collaborators');
-                        // Refresh the UI
-                        if (typeof renderNodeTable === 'function') renderNodeTable();
-                        if (typeof renderGroupTable === 'function') renderGroupTable();
-                        if (typeof updateMapMarkers === 'function') updateMapMarkers();
+                        // Dispatch custom event to trigger UI refresh
+                        window.dispatchEvent(new CustomEvent('collab-sync'));
                     }
                 }
             } catch (e) {
                 // Silent fail on polling
             }
-        }, 30000);
+        }, 15000); // Poll every 15 seconds
 
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initialize);
@@ -1277,6 +1275,18 @@
             if (e.key === 'Enter' && e.target.tagName === 'INPUT' && !['TEXTAREA'].includes(e.target.tagName)) {
                 addNode();
             }
+        });
+
+        // Listen for collaboration sync events
+        window.addEventListener('collab-sync', () => {
+            console.log('[Collab] Refreshing UI with new data');
+            // Reload data from localStorage
+            nodes = JSON.parse(localStorage.getItem('nodes')) || [];
+            groups = JSON.parse(localStorage.getItem('groups')) || [];
+            // Re-render everything
+            renderNodeTable();
+            renderGroupTable();
+            updateMapMarkers();
         });
 
         // Initial render
