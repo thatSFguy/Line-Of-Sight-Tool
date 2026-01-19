@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>Node Manager</title>
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
@@ -369,7 +368,7 @@
                         setTimeout(() => {
                             closeModal();
                             location.reload(); // Reload to refresh UI with new data
-                        }, 5000);
+                        }, 1000);
                     } else {
                         showMessage(result.error || 'Failed to connect', 'error');
                     }
@@ -565,7 +564,7 @@
             } catch (e) {
                 // Silent fail on polling
             }
-        }, 300000); // Poll every 5 minutes
+        }, 15000); // Poll every 15 seconds
 
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initialize);
@@ -955,7 +954,6 @@
                 `;
                 tbody.appendChild(row);
             });
-            localStorage.setItem('nodes', JSON.stringify(nodes));
             updateMapMarkers();
         }
 
@@ -974,7 +972,6 @@
                 `;
                 tbody.appendChild(row);
             });
-            localStorage.setItem('groups', JSON.stringify(groups));
         }
 
         // === Map Markers ===
@@ -1008,6 +1005,12 @@
             }
         }
 
+        // === Save Data (only call this when user makes actual changes) ===
+        function saveData() {
+            localStorage.setItem('nodes', JSON.stringify(nodes));
+            localStorage.setItem('groups', JSON.stringify(groups));
+        }
+
         // === Node CRUD ===
         function addNode() {
             clearMessages();
@@ -1036,6 +1039,7 @@
             }
 
             clearForm();
+            saveData();
             renderNodeTable();
             renderGroupTable();
         }
@@ -1071,6 +1075,7 @@
                 nodes.splice(index, 1);
                 groups = groups.filter(g => g.name !== name);
                 groups.forEach(g => g.nodes = g.nodes.filter(n => n !== name));
+                saveData();
                 renderNodeTable();
                 renderGroupTable();
                 showSuccess('Node deleted.');
@@ -1080,6 +1085,7 @@
         function updateIncluded(index, checked) {
             nodes[index].included = checked;
             if (nodes[index].primary) nodes[index].included = true;
+            saveData();
             renderNodeTable();
         }
 
@@ -1088,6 +1094,7 @@
                 n.primary = i === index;
                 if (i === index) n.included = true;
             });
+            saveData();
             renderNodeTable();
         }
 
@@ -1126,12 +1133,14 @@
                 showSuccess(`Group "${primary.name}" created!`);
             }
 
+            saveData();
             renderGroupTable();
         }
 
         function deleteGroup(index) {
             if (confirm(`Delete group "${groups[index].name}"?`)) {
                 groups.splice(index, 1);
+                saveData();
                 renderGroupTable();
                 showSuccess('Group deleted.');
             }
@@ -1142,6 +1151,7 @@
                 if (g.name === oldName) g.name = newName;
                 g.nodes = g.nodes.map(n => n === oldName ? newName : n);
             });
+            // Note: saveData() is called by the parent function (addNode) that calls this
             renderGroupTable();
         }
 
@@ -1216,6 +1226,7 @@
                 const replace = confirm('Replace existing nodes? (Cancel = Append)');
                 nodes = replace ? newNodes : [...nodes, ...newNodes];
                 if (replace) groups = [];
+                saveData();
                 renderNodeTable(); renderGroupTable();
                 showSuccess(`${newNodes.length} nodes ${replace ? 'replaced' : 'appended'}.`);
             };
