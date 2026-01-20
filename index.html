@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <title>RF Line-of-Sight Tool (910 MHz)</title>
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -407,7 +407,8 @@
                 'Latitude': node.latitude,
                 'Longitude': node.longitude,
                 'Height': node.height,
-                'Notes': node.notes || ''
+                'Notes': node.notes || '',
+                'Status': node.status || 'on-air'
             }));
         }
 
@@ -616,12 +617,35 @@
 
         async function processAllNodes(defaultHeight, losThreshold) {
             const resultsDiv = document.getElementById('results');
-            const allNodes = getAllNodesData();
+            const storedNodes = JSON.parse(localStorage.getItem('nodes')) || [];
             
-            if (!allNodes || allNodes.length < 2) {
+            if (storedNodes.length < 2) {
                 resultsDiv.innerHTML = '<p class="error">Need at least 2 nodes in Node Manager to run All Nodes analysis.</p>';
                 return;
             }
+
+            // Separate nodes by status
+            const onAirNodes = storedNodes.filter(n => (n.status || 'on-air') === 'on-air');
+            const plannedNodes = storedNodes.filter(n => n.status === 'planned');
+            const offAirNodes = storedNodes.filter(n => n.status === 'off-air');
+            
+            // Nodes to analyze: On-Air + Planned (exclude Off-Air)
+            const activeNodes = [...onAirNodes, ...plannedNodes];
+            
+            if (activeNodes.length < 2) {
+                resultsDiv.innerHTML = '<p class="error">Need at least 2 On-Air or Planned nodes to run analysis.</p>';
+                return;
+            }
+
+            // Convert to format expected by processPair
+            const allNodes = activeNodes.map(node => ({
+                'Location Name': node.name,
+                'Latitude': node.latitude,
+                'Longitude': node.longitude,
+                'Height': node.height,
+                'Notes': node.notes || '',
+                'Status': node.status || 'on-air'
+            }));
 
             const pairs = generateUniquePairs(allNodes);
             const totalPairs = pairs.length;
@@ -629,6 +653,11 @@
             resultsDiv.innerHTML = `
                 <div class="progress-container">
                     <h3>Processing ${totalPairs} unique pairs...</h3>
+                    <p style="font-size: 14px; color: #666;">
+                        🟢 On-Air: ${onAirNodes.length} | 
+                        🟡 Planned: ${plannedNodes.length} | 
+                        🔴 Off-Air: ${offAirNodes.length} (excluded)
+                    </p>
                     <div class="progress-bar">
                         <div class="progress-bar-fill" id="progressFill" style="width: 0%"></div>
                     </div>
@@ -647,15 +676,17 @@
                 attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
 
-            // Add all node markers
+            // Add all node markers with status colors
+            const markerColors = { 'on-air': 'green', 'planned': 'gold', 'off-air': 'red' };
             allNodes.forEach(node => {
+                const color = markerColors[node['Status']] || 'blue';
                 L.marker([node['Latitude'], node['Longitude']], {
                     icon: L.icon({ 
-                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png', 
+                        iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-${color}.png`, 
                         iconSize: [25, 41], 
                         iconAnchor: [12, 41] 
                     })
-                }).addTo(map).bindPopup(`${node['Location Name']}${node['Notes'] ? '<br>Notes: ' + node['Notes'] : ''}`);
+                }).addTo(map).bindPopup(`${node['Location Name']}<br>Status: ${node['Status']}${node['Notes'] ? '<br>Notes: ' + node['Notes'] : ''}`);
             });
 
             const results = [];
@@ -672,6 +703,10 @@
                     losThreshold,
                     true  // Skip individual charts for All Nodes mode
                 );
+                
+                // Add status info to result
+                result.statusA = nodeA['Status'];
+                result.statusB = nodeB['Status'];
                 results.push(result);
 
                 // Draw line on map
@@ -686,6 +721,65 @@
                 document.getElementById('progressFill').style.width = progress + '%';
                 document.getElementById('progressText').textContent = `${i + 1} / ${totalPairs} (${progress}%)`;
             }
+
+            // Calculate values for each node
+            // valueActual: longest clear LOS to On-Air nodes only
+            // valuePotential: longest clear LOS to On-Air + Planned nodes
+            const nodeValues = {};
+            
+            storedNodes.forEach(node => {
+                nodeValues[node.name] = {
+                    valueActual: null,
+                    valuePotential: null
+                };
+            });
+
+            results.forEach(r => {
+                if (r.status === 'Clear') {
+                    const dist = parseFloat(r.distance);
+                    
+                    // Update valuePotential for both nodes (all clear connections)
+                    if (!nodeValues[r.nameA].valuePotential || dist > nodeValues[r.nameA].valuePotential) {
+                        nodeValues[r.nameA].valuePotential = dist;
+                    }
+                    if (!nodeValues[r.nameB].valuePotential || dist > nodeValues[r.nameB].valuePotential) {
+                        nodeValues[r.nameB].valuePotential = dist;
+                    }
+                    
+                    // Update valueActual only if BOTH nodes are on-air
+                    if (r.statusA === 'on-air' && r.statusB === 'on-air') {
+                        if (!nodeValues[r.nameA].valueActual || dist > nodeValues[r.nameA].valueActual) {
+                            nodeValues[r.nameA].valueActual = dist;
+                        }
+                        if (!nodeValues[r.nameB].valueActual || dist > nodeValues[r.nameB].valueActual) {
+                            nodeValues[r.nameB].valueActual = dist;
+                        }
+                    }
+                    
+                    // For planned nodes, valueActual = longest clear to any on-air node
+                    if (r.statusA === 'planned' && r.statusB === 'on-air') {
+                        if (!nodeValues[r.nameA].valueActual || dist > nodeValues[r.nameA].valueActual) {
+                            nodeValues[r.nameA].valueActual = dist;
+                        }
+                    }
+                    if (r.statusB === 'planned' && r.statusA === 'on-air') {
+                        if (!nodeValues[r.nameB].valueActual || dist > nodeValues[r.nameB].valueActual) {
+                            nodeValues[r.nameB].valueActual = dist;
+                        }
+                    }
+                }
+            });
+
+            // Update stored nodes with calculated values
+            storedNodes.forEach(node => {
+                if (nodeValues[node.name]) {
+                    node.valueActual = nodeValues[node.name].valueActual;
+                    node.valuePotential = nodeValues[node.name].valuePotential;
+                }
+            });
+            
+            // Save updated nodes to localStorage
+            localStorage.setItem('nodes', JSON.stringify(storedNodes));
 
             // Fit map to all nodes
             const bounds = allNodes.map(n => [n['Latitude'], n['Longitude']]);
@@ -713,12 +807,14 @@
                 return parseFloat(a.distance) - parseFloat(b.distance);
             });
 
+            const statusIcons = { 'on-air': '🟢', 'planned': '🟡', 'off-air': '🔴' };
+
             results.forEach(r => {
                 const tr = document.createElement('tr');
                 const statusColor = r.status === 'Clear' ? 'var(--success)' : 'var(--danger)';
                 tr.innerHTML = `
-                    <td>${r.nameA}</td>
-                    <td>${r.nameB}</td>
+                    <td>${statusIcons[r.statusA] || '⚪'} ${r.nameA}</td>
+                    <td>${statusIcons[r.statusB] || '⚪'} ${r.nameB}</td>
                     <td>${r.distance}</td>
                     <td style="color: ${statusColor}; font-weight: bold;">${r.status}</td>
                     <td>${r.diffLoss}</td>
@@ -734,10 +830,16 @@
             const div = document.createElement('div');
             div.innerHTML = `
                 <h2>All Nodes LOS Results</h2>
-                <p><strong>${allNodes.length}</strong> nodes, <strong>${totalPairs}</strong> unique pairs analyzed</p>
+                <p>
+                    <strong>${activeNodes.length}</strong> active nodes (🟢 ${onAirNodes.length} On-Air, 🟡 ${plannedNodes.length} Planned), 
+                    <strong>${totalPairs}</strong> unique pairs analyzed
+                </p>
                 <p>
                     <span style="color: var(--success); font-weight: bold;">Clear: ${clearCount}</span> | 
                     <span style="color: var(--danger); font-weight: bold;">Obstructed: ${obstructedCount}</span>
+                </p>
+                <p style="font-size: 14px; color: #666; margin-top: 10px;">
+                    ✅ Node values updated! Check Node Manager to see Actual & Potential reach distances.
                 </p>
             `;
             div.appendChild(table);
