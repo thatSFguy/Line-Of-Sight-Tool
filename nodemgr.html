@@ -730,6 +730,33 @@
             font-size: 14px;
         }
 
+        .form-group select {
+            padding: 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+            background: white;
+            color: var(--text);
+        }
+
+        [data-theme="dark"] .form-group select {
+            background: #34495e;
+            border-color: #555;
+        }
+
+        /* Value columns styling */
+        #nodeTable td:nth-child(8),
+        #nodeTable td:nth-child(9) {
+            text-align: right;
+            font-family: monospace;
+        }
+
+        /* Status column - center the emoji */
+        #nodeTable td:nth-child(3) {
+            text-align: center;
+            font-size: 16px;
+        }
+
         .theme-toggle {
             position: fixed;
             top: 15px;
@@ -812,6 +839,14 @@
                 <label>Notes:</label>
                 <textarea id="notes" placeholder="Optional notes..." rows="2"></textarea>
             </div>
+            <div class="form-group">
+                <label>Status:</label>
+                <select id="status">
+                    <option value="on-air">🟢 On-Air</option>
+                    <option value="planned">🟡 Planned</option>
+                    <option value="off-air">🔴 Off-Air</option>
+                </select>
+            </div>
 
             <div id="form-buttons">
                 <button id="addNodeBtn" onclick="addNode()">Add Node</button>
@@ -849,10 +884,13 @@
             <tr>
                 <th>Include</th>
                 <th>Primary</th>
+                <th>Status</th>
                 <th>Location Name</th>
                 <th>Latitude</th>
                 <th>Longitude</th>
                 <th>Height (m)</th>
+                <th>Actual (mi)</th>
+                <th>Potential (mi)</th>
                 <th>Notes</th>
                 <th>Actions</th>
             </tr>
@@ -927,26 +965,45 @@
         });
 
         // === Render Functions ===
+        function getStatusIcon(status) {
+            switch(status) {
+                case 'on-air': return '🟢';
+                case 'off-air': return '🔴';
+                case 'planned': return '🟡';
+                default: return '⚪';
+            }
+        }
+
+        function formatValue(val) {
+            if (val === null || val === undefined || val === '') return '—';
+            return parseFloat(val).toFixed(1);
+        }
+
         function renderNodeTable(filter = '') {
             const tbody = document.getElementById('nodeTableBody');
             tbody.innerHTML = '';
             const filtered = nodes.filter(n => 
                 n.name.toLowerCase().includes(filter) ||
-                n.notes.toLowerCase().includes(filter) ||
+                (n.notes || '').toLowerCase().includes(filter) ||
                 n.latitude.toString().includes(filter) ||
-                n.longitude.toString().includes(filter)
+                n.longitude.toString().includes(filter) ||
+                (n.status || '').toLowerCase().includes(filter)
             );
 
             filtered.forEach((node, idx) => {
                 const realIdx = nodes.indexOf(node);
+                const status = node.status || 'on-air';
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td><input type="checkbox" ${node.included ? 'checked' : ''} onchange="updateIncluded(${realIdx}, this.checked)"></td>
                     <td><input type="radio" name="primary" ${node.primary ? 'checked' : ''} onchange="setPrimary(${realIdx})"></td>
+                    <td title="${status}">${getStatusIcon(status)}</td>
                     <td>${escapeHtml(node.name)}</td>
                     <td>${node.latitude.toFixed(6)}</td>
                     <td>${node.longitude.toFixed(6)}</td>
                     <td>${node.height || ''}</td>
+                    <td>${formatValue(node.valueActual)}</td>
+                    <td>${formatValue(node.valuePotential)}</td>
                     <td>${escapeHtml(node.notes || '')}</td>
                     <td>
                         <span class="edit-btn" onclick="editNode(${realIdx})">✏️</span>
@@ -976,11 +1033,27 @@
         }
 
         // === Map Markers ===
+        function getMarkerIcon(status) {
+            const colors = {
+                'on-air': 'green',
+                'off-air': 'red',
+                'planned': 'gold'
+            };
+            const color = colors[status] || 'blue';
+            return L.icon({
+                iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-${color}.png`,
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34]
+            });
+        }
+
         function updateMapMarkers() {
             markers.clearLayers();
             nodes.forEach((node, i) => {
                 if (isNaN(node.latitude) || isNaN(node.longitude)) return;
-                const marker = L.marker([node.latitude, node.longitude])
+                const status = node.status || 'on-air';
+                const marker = L.marker([node.latitude, node.longitude], { icon: getMarkerIcon(status) })
                     .addTo(markers)
                     .bindPopup(getPopupContent(node, i), { closeButton: false });
 
@@ -990,10 +1063,17 @@
         }
 
         function getPopupContent(node, i) {
+            const status = node.status || 'on-air';
+            const statusLabel = { 'on-air': '🟢 On-Air', 'off-air': '🔴 Off-Air', 'planned': '🟡 Planned' }[status] || status;
+            const actualVal = node.valueActual ? `${parseFloat(node.valueActual).toFixed(1)} mi` : '—';
+            const potentialVal = node.valuePotential ? `${parseFloat(node.valuePotential).toFixed(1)} mi` : '—';
             return `
                 <b>${escapeHtml(node.name)}</b><br>
+                Status: ${statusLabel}<br>
                 Lat: ${node.latitude.toFixed(6)}<br>
                 Lng: ${node.longitude.toFixed(6)}<br>
+                Actual Reach: ${actualVal}<br>
+                Potential Reach: ${potentialVal}<br>
                 <button onclick="editNode(${i}); map.closePopup();" style="margin-top:5px; padding:3px 8px; font-size:12px;">
                     Edit Node
                 </button>
@@ -1020,6 +1100,7 @@
             const lng = parseFloat(document.getElementById('longitude').value);
             const height = parseFloat(document.getElementById('height').value) || null;
             const notes = document.getElementById('notes').value.trim();
+            const status = document.getElementById('status').value;
 
             if (!name || isNaN(lat) || isNaN(lng)) {
                 showError('Name, Latitude, and Longitude are required.');
@@ -1028,14 +1109,37 @@
 
             if (editIndex !== null) {
                 const oldName = nodes[editIndex].name;
-                nodes[editIndex] = { name, latitude: lat, longitude: lng, height, notes: notes || '', included: nodes[editIndex].included, primary: nodes[editIndex].primary };
+                const oldNode = nodes[editIndex];
+                nodes[editIndex] = { 
+                    name, 
+                    latitude: lat, 
+                    longitude: lng, 
+                    height, 
+                    notes: notes || '', 
+                    status,
+                    valueActual: oldNode.valueActual || null,
+                    valuePotential: oldNode.valuePotential || null,
+                    included: oldNode.included, 
+                    primary: oldNode.primary 
+                };
                 updateGroupsOnNameChange(oldName, name);
                 editIndex = null;
                 document.getElementById('addNodeBtn').textContent = 'Add Node';
                 document.getElementById('cancelBtn').style.display = 'none';
                 showSuccess('Node updated!');
             } else {
-                nodes.push({ name, latitude: lat, longitude: lng, height, notes: notes || '', included: false, primary: false });
+                nodes.push({ 
+                    name, 
+                    latitude: lat, 
+                    longitude: lng, 
+                    height, 
+                    notes: notes || '', 
+                    status,
+                    valueActual: null,
+                    valuePotential: null,
+                    included: false, 
+                    primary: false 
+                });
                 showSuccess('Node added!');
             }
 
@@ -1052,6 +1156,7 @@
             document.getElementById('longitude').value = node.longitude;
             document.getElementById('height').value = node.height || '';
             document.getElementById('notes').value = node.notes || '';
+            document.getElementById('status').value = node.status || 'on-air';
             document.getElementById('addNodeBtn').textContent = 'Save';
             document.getElementById('cancelBtn').style.display = 'inline';
             editIndex = index;
@@ -1158,13 +1263,16 @@
 
         // === CSV ===
         function downloadCSV() {
-            const headers = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
+            const headers = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes', 'Status', 'Actual Reach (mi)', 'Potential Reach (mi)'];
             const rows = nodes.map(n => [
                 `"${n.name.replace(/"/g, '""')}"`,
                 n.latitude,
                 n.longitude,
                 n.height || '',
-                `"${(n.notes || '').replace(/"/g, '""')}"`
+                `"${(n.notes || '').replace(/"/g, '""')}"`,
+                n.status || 'on-air',
+                n.valueActual || '',
+                n.valuePotential || ''
             ].join(','));
             downloadFile([headers.join(','), ...rows].join('\n'), 'nodes.csv');
         }
@@ -1174,9 +1282,16 @@
             const primaryNode = nodes.find(n => n.name === group.name);
             const includedNodes = nodes.filter(n => group.nodes.includes(n.name));
             const groupNodes = primaryNode ? [primaryNode, ...includedNodes] : includedNodes;
-            const headers = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes'];
+            const headers = ['Location Name', 'Latitude', 'Longitude', 'Height', 'Notes', 'Status', 'Actual Reach (mi)', 'Potential Reach (mi)'];
             const rows = groupNodes.map(n => [
-                `"${n.name.replace(/"/g, '""')}"`, n.latitude, n.longitude, n.height || '', `"${(n.notes || '').replace(/"/g, '""')}"`
+                `"${n.name.replace(/"/g, '""')}"`, 
+                n.latitude, 
+                n.longitude, 
+                n.height || '', 
+                `"${(n.notes || '').replace(/"/g, '""')}"`,
+                n.status || 'on-air',
+                n.valueActual || '',
+                n.valuePotential || ''
             ].join(','));
             downloadFile([headers.join(','), ...rows].join('\n'), `${group.name}.csv`);
         }
@@ -1217,8 +1332,16 @@
                     if (values.length < 3 || !values[0] || isNaN(values[1]) || isNaN(values[2])) continue;
                     const height = values[3] && !isNaN(values[3]) ? parseFloat(values[3]) : null;
                     newNodes.push({
-                        name: values[0], latitude: parseFloat(values[1]), longitude: parseFloat(values[2]),
-                        height, notes: values[4] || '', included: false, primary: false
+                        name: values[0], 
+                        latitude: parseFloat(values[1]), 
+                        longitude: parseFloat(values[2]),
+                        height, 
+                        notes: values[4] || '', 
+                        status: values[5] || 'on-air',
+                        valueActual: null,
+                        valuePotential: null,
+                        included: false, 
+                        primary: false
                     });
                 }
 
@@ -1258,6 +1381,7 @@
             ['name', 'latitude', 'longitude', 'height', 'notes'].forEach(id => {
                 document.getElementById(id).value = '';
             });
+            document.getElementById('status').value = 'on-air';
         }
 
         function clearMessages() {
